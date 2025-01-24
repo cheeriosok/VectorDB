@@ -21,15 +21,16 @@ A simplified Redis-like in-memory data structure store, capable of supporting ba
 ## Installation
 
 ### Prerequisites
-- [Go](https://golang.org/dl/) (or replace with your language's prerequisites)
+- C++ 20
+- Linux
 
 Clone the repository:
 
-    git clone https://github.com/yourusername/build-your-own-redis.git
+    git clone https://github.com/cheeriosok/Redis
 
 Navigate to the project directory:
 
-    cd build-your-own-redis
+    cd redis
 
 Build the project (if applicable):
 
@@ -39,11 +40,11 @@ Build the project (if applicable):
 
 Start the BYOR server:
 
-    ./byor-server
+    ./redis-server
 
 Connect to the server using BYOR client:
 
-    ./byor-client
+    ./redis-client
 
 Once connected, you can use commands similar to Redis:
 
@@ -53,17 +54,4 @@ Once connected, you can use commands similar to Redis:
     > GET hello
     "world"
 
-## Contribution
-
-Interested in contributing to BYOR? Great! Here's how you can help:
-
-1. Fork the repository.
-2. Create a new branch for your feature or fix.
-3. Push your changes to your forked repo.
-4. Create a pull request from your branch to the main BYOR repository.
-5. After review, if everything looks good, your changes will be merged.
-
-## Acknowledgments
-
-- This project was inspired by and based on the ["Build your own Redis"](original-link-to-the-tutorial) tutorial. All credits to the original author for the idea and foundational knowledge.
 
