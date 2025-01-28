@@ -25,7 +25,7 @@
 #include <netinet/ip.h>
 
 // Project headers
-#include "hashtable.hpp"
+#include "HTable.hpp"
 #include "zset.hpp"
 #include "list.hpp"
 #include "heap.hpp"
