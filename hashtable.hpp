@@ -13,9 +13,8 @@
 
 // To-Do: 
 /*
-1. Multithreading/Concurrency applications & guardrails
-2. Testing each Method - likely some inconsistencies in passing by ref/ptr (particularly in insert) 
-3. Make it safer!
+1. Testing each Method - likely some inconsistencies in passing by ref/ptr (particularly in insert) 
+2. Multithreading/Concurrency applications & guardrails - MAJOR undertaking probably. Let's see if this shit runs first
 */
 
 // FNV-1a Hashing Algorithm with SIMD.
@@ -296,7 +295,6 @@ private:
             resizing_pos_ = 0;
         }
     }
-    // We start resizing, first a sanity check that resizing table doesn't already exist!
     void start_resize() {
         assert(!temporary_table_); //  first a sanity check that resizing table doesn't already exist!
         size_t new_capacity = primary_table_.capacity() * 2; // new_capacity will be 2x previous, this is fairly standard.
