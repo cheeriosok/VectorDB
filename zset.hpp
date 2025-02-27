@@ -7,6 +7,8 @@
 #include <cassert>
 #include "avl_tree.hpp"
 #include "hash_table.hpp"
+#include <string>
+#include "common.hpp"
 
 namespace ds {
 
@@ -31,7 +33,7 @@ public:
         ZNode* node = new(mem) ZNode(score, name.length());
         node->tree_ = AVLNode{};
         node->hash_ = HNode{};
-        node->hash_.hcode = str_hash(
+        node->hash_.hcode = hash_string(
             reinterpret_cast<const uint8_t*>(name.data()), 
             name.length()
         );

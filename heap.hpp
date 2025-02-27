@@ -88,63 +88,75 @@ public:
 private:
     std::vector<HeapItem<T>> items_; // So we have a vector of HeapItems with any type
     Compare compare_; // and a comparator function (for our MinHeap functionality)
-    
-    void sift_up(std::size_t pos) { 
-        HeapItem<T> temp = std::move(items_[pos]);
+    // fancy way of swapping parent and child (our node at pos) until our child satisfies the comparator property thereby sifting it up the tree!
+    void sift_up(std::size_t pos) { // position in array as an argument to push_up our item
+        HeapItem<T> temp = std::move(items_[pos]); // let's grab that object through movement (no copy)
         
-        while (pos > 0) {
-            std::size_t parent_pos = parent(pos);
-            if (!compare_(temp.value_, items_[parent_pos].value_)) {
-                break;
+        while (pos > 0) { // if we're not at root
+            std::size_t parent_pos = parent(pos); // then grab parent's pos (check parent func below)
+            if (!compare_(temp.value_, items_[parent_pos].value_)) { // compare value for our item to parents value 
+                break; // if we're valid (less if comp is less than (minHeap) and greater if comp is greater than (maxHeap)), then no need to sift up! 
             }
             
-            items_[pos] = std::move(items_[parent_pos]);
-            if (items_[pos].position_ref_) {
+            items_[pos] = std::move(items_[parent_pos]); // we place parent in place of where item used to be (below it).
+            if (items_[pos].position_ref_) { // assign position reference (if tracking externally)***
                 *items_[pos].position_ref_ = pos;
             }
-            pos = parent_pos;
+            pos = parent_pos; // lets move pos to now parents position.
         }
         
-        items_[pos] = std::move(temp);
+        items_[pos] = std::move(temp); // now that we moved parents down lets place pos in the correct place. 
         if (items_[pos].position_ref_) {
-            *items_[pos].position_ref_ = pos;
-        }
+            *items_[pos].position_ref_ = pos; // also assign new position reference (if tracking externally)***
+        } 
     }
-    // If the item at the present node gets popped, we must redefine who takes its place! We 
-    void sift_down(std::size_t pos) {
-        HeapItem<T> temp = std::move(items_[pos]);
-        const std::size_t len = items_.size();
-        
-        while (true) {
-            std::size_t min_pos = pos;
-            std::size_t left = left_child(pos);
-            std::size_t right = right_child(pos);
-            
-            if (left < len && compare_(items_[left].value_, temp.value_)) {
-                min_pos = left;
+    void sift_down(std::size_t pos) { // Function to restore heap order by moving an element down.
+
+        HeapItem<T> temp = std::move(items_[pos]); // Store the current node in a temporary variable (removing it from its position).
+        const std::size_t len = items_.size(); // Get the total number of elements in the heap.
+    
+        while (true) { // Start an infinite loop to traverse down the heap.
+            std::size_t min_pos = pos; // Assume the current position is correct.
+            std::size_t left = left_child(pos); // Compute the left child index using heap property: left = 2 * i + 1.
+            std::size_t right = right_child(pos); // Compute the right child index: right = 2 * i + 2.
+    
+            // Check if left child is within bounds and whether it should replace the current position.
+            if (left < len && compare_(items_[left].value_, temp.value_)) { 
+                min_pos = left; // Assign left child as the new minimum if it satisfies the heap condition.
             }
-            
-            if (right < len && compare_(items_[right].value_, 
-                (min_pos == pos ? temp.value_ : items_[min_pos].value_))) {
-                min_pos = right;
+    
+            // Check if right child is within bounds and whether it should replace the current position.
+            if (right < len && compare_(items_[right].value_,  
+                (min_pos == pos ? temp.value_ : items_[min_pos].value_))) { 
+                min_pos = right; // Assign right child as the new minimum if it satisfies the heap condition.
             }
-            
+    
+            // If the current position is already the smallest (or largest for max-heap), we're done.
             if (min_pos == pos) {
-                break;
+                break; 
             }
-            
+    
+            // Move the selected child up to the current position.
             items_[pos] = std::move(items_[min_pos]);
+            
+            // Update the position reference if it exists (useful if external tracking of positions is required).
             if (items_[pos].position_ref_) {
                 *items_[pos].position_ref_ = pos;
             }
+    
+            // Move down to the new position for the next iteration.
             pos = min_pos;
         }
-        
+    
+        // Place the original element in its final position.
         items_[pos] = std::move(temp);
+    
+        // Update the position reference for the final placement if necessary.
         if (items_[pos].position_ref_) {
             *items_[pos].position_ref_ = pos;
         }
     }
+    
     
     /*
     Heap (tree view)              Array representation

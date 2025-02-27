@@ -27,7 +27,7 @@
     uint32_t hash = INITIAL;
     size_t i = 0;
 
-    for (; i + 4 <= len; i += 4) { // SIMD/Loop Unrolling
+    for (; i + 4 <= len; i += 4) { 
         hash = (hash ^ data[i]) * MULTIPLIER;
         hash = (hash ^ data[i + 1]) * MULTIPLIER;
         hash = (hash ^ data[i + 2]) * MULTIPLIER;
