@@ -60,11 +60,11 @@ protected:
     std::unique_ptr<HNode> next_; 
     std::uint64_t hcode_{0}; 
     // Provide access to our 'parent modifiers'
-    friend class HTable<T>; // 
+    friend class HTable<T>; 
     friend class HMap<T>; 
 };
 
-// 
+
 
 template<typename T>
 class HTable {
