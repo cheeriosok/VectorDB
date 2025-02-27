@@ -16,8 +16,8 @@ This project is a high-performance, networked key-value store that supports **ha
 ## Project Structure
 ```
 /project
-    ├── include/          # Header-only library
-    │   ├── command_processor.hpp  # Command parsing & execution
+    ├── include/                # Header-only library
+    │   ├── command_processor.hpp   # Command parsing & execution
     │   ├── common.hpp              # Common utilities and constants
     │   ├── connection.hpp          # Client connection handling
     │   ├── entry_manager.hpp       # Key-value store logic
@@ -27,12 +27,14 @@ This project is a high-performance, networked key-value store that supports **ha
     │   ├── server_state.hpp        # Global server state management
     │   ├── server.hpp              # Main server class
     │   ├── socket.hpp              # RAII-based socket wrapper
-    │   ├── thread_pool.hpp         # Multi-threaded task execution
-    │   ├── heap.hpp                # TTL handling with min-heap
-    │   ├── zset.hpp                # Sorted set (ZSet) data structure
-    │   ├── htable.hpp              # Hash table for key-value storage
-    │   ├── list.hpp                # Doubly-linked list utility
-```
+    ├── thread_pool.hpp         # Multi-threaded task execution
+    ├── heap.hpp                # TTL handling with min-heap
+    ├── zset.hpp                # Sorted set (ZSet) data structure
+    ├── hashtable.hpp           # Hash table for key-value storage
+    ├── list.hpp                # Doubly-linked list utility
+    ├── common.hpp              # Common utilities and constants
+    ├── avl.hpp                 # AVL Tree for fast sorting
+``` 
 
 ---
 
@@ -90,6 +92,16 @@ echo "GET key1" | nc localhost 1234
 - **Lock-free worker queue in thread pool**
 - **Cache-friendly data structures**
 - **Efficient memory management using RAII**
+
+---
+
+## **Coming Soon**
+- **Unit and Integration Testing**
+- **Memory Pooling and Lock-Free Data Structures**
+- **Zero/Copy Send/Recv**
+- **Thread Affinity & NUMA Awareness**
+- **Viewstamped Replication**
+- **Multi-Tiered Caching w/ w-TinyLFU**
 
 ---
 
