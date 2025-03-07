@@ -1,6 +1,8 @@
 #ifndef RESPONSE_SERIALIZER_HPP
 #define RESPONSE_SERIALIZER_HPP
 
+#include "common.hpp"
+
 class ResponseSerializer {
     public:
         template<typename T>

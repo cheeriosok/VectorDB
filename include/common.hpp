@@ -1,6 +1,9 @@
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
+#include <string>
+#include <type_traits>
+
 /* fairly convoluted but container_of can help you move "backwards" in inheritance hierarchies or class containment to find the parent class or container.
 
  example use cases:
@@ -16,8 +19,6 @@ Parent* container_of(Member* ptr, std::size_t offset) {
     return reinterpret_cast<Parent*>(reinterpret_cast<char*>(ptr) - offset);
 }
 
-#include <string>
-#include <type_traits>
 
 enum class SerializationType : uint8_t {
     Nil     = 0,
