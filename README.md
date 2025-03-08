@@ -109,7 +109,7 @@ echo "GET key1" | nc localhost 1234
 
 ## Contributing
 Contributions are welcome! Please follow the coding guidelines:
-1. **Follow Modern C++ best practices** (C++20 features preferred).
+1. **Follow Modern C++ best practices** (C++20/23 features preferred).
 2. **Write unit tests** for new features.
 3. **Use smart pointers** instead of raw pointers.
 4. **Ensure thread safety** when modifying global state.
