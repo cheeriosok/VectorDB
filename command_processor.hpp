@@ -1,6 +1,22 @@
 #ifndef COMMAND_PROCESSOR_HPP
 #define COMMAND_PROCESSOR_HPP
 
+#include <vector>        
+#include <string>        
+#include <string_view>   
+#include <unordered_map> 
+#include <functional>    
+#include <chrono>        // std::chrono::steady_clock
+#include <cstdint>       // std::uint64_t
+#include <algorithm>     
+#include <cmath>         
+#include <utility>       
+#include "hashtable.hpp" 
+#include "heap.hpp"      
+#include "zset.hpp"      
+#include "entry_manager.hpp" 
+#include "response_serializer.hpp"  
+
 // modern command processor with type-safe command handling
 class CommandProcessor {
     public:

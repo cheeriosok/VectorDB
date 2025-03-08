@@ -1,6 +1,15 @@
 #ifndef SOCKET_HPP
 #define SOCKET_HPP
 
+#include <unistd.h>      // For close()
+#include <fcntl.h>       // For fcntl(), O_NONBLOCK
+#include <utility>       // For std::exchange
+#include <system_error>  // For std::make_error_code, std::errc
+#include <expected>      // For std::expected (if using C++23)
+
+template<typename T>
+using Result = std::expected<T, std::error_code>;
+
 // socket class manages a file descriptor (fd) and ensures proper cleanup
 class Socket {
 public:

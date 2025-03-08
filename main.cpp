@@ -1,6 +1,11 @@
 
 
 // Modern request parser using std::span
+#include <iostream>      // std::cerr, std::cout
+#include <cstdint>       // uint16_t
+#include <cstdlib>       // std::size_t
+#include <csignal>       // std::signal, SIGINT
+#include <exception>     // std::exception
 
 
 int main(int argc, char* argv[]) {

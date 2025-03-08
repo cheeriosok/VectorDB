@@ -1,14 +1,13 @@
 #ifndef LOGGING_HPP
 #define LOGGING_HPP
 
-#include <iostream>
-#include <source_location>
-#include <format>
-#include <string_view>
-#include <chrono> // high-res timestamps
-#include <ctime> // need for strftime
-#include <expected>
-#include <system_error>
+#include <iostream>        
+#include <string_view>     
+#include <chrono>         
+#include <ctime>          
+#include <source_location> 
+#include <format>        
+
 
 // variadic templates for multiple arguments.
 template<typename... Args>
@@ -39,9 +38,5 @@ Output:
 [2025-03-06 18:05:12] main.cpp:6 - File config.yaml could not be found. Error code: 404
 
 */
-
-// represents an expected vlaue of type T or an error.
-template<typename T>
-using Result = std::expected<T, std::error_code>;
 
 #endif 

@@ -1,11 +1,17 @@
 #ifndef ENTRY_MANAGER_HPP
 #define ENTRY_MANAGER_HPP
 
-#include <vector>
-#include <cstdint>
-#include <memory>
-#include <unordered_map>
-#include "response_serializer.hpp"
+#include <vector>        // std::vector
+#include <cstdint>       // int64_t, uint64_t
+#include <memory>        // std::unique_ptr
+#include <unordered_map> // std::unordered_map
+#include <functional>    // std::function (used in thread pool)
+#include "response_serializer.hpp" 
+#include "heap.hpp"               
+#include "thread_pool.hpp"         
+#include "entry.hpp"               
+#include "common.hpp"           
+
 
 class EntryManager {
     public:

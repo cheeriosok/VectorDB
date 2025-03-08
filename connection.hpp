@@ -1,6 +1,23 @@
 #ifndef CONNECTION_HPP
 #define CONNECTION_HPP
 
+#include <cstdint>        // uint8_t, uint16_t, uint32_t
+#include <vector>         // std::vector
+#include <chrono>         // std::chrono::steady_clock, std::chrono::milliseconds
+#include <system_error>   // std::error_code, std::make_error_code, std::errc
+#include <expected>       // std::expected (C++23) or equivalent custom implementation
+#include <cassert>        // assert()
+#include <span>           // std::span (C++20)
+#include <algorithm>      // std::copy
+#include <unistd.h>       // read(), write()
+#include <cerrno>         // errno, EINTR, EAGAIN
+
+#include "socket.hpp"               // Definition of `Socket` class
+#include "request_parser.hpp"       // `RequestParser::parse()`
+#include "response_serializer.hpp"  // `ResponseSerializer::append_data()`
+#include "command_processor.hpp"    // `process_command()`
+
+
 // defines the different states a connection can be in
 enum class ConnectionState : uint8_t {
     Request,  // Waiting for a request from the client

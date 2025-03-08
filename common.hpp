@@ -1,8 +1,11 @@
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
-#include <string>
-#include <type_traits>
+#include <cstddef>       
+#include <cstdint>      
+#include <type_traits>   
+#include <string>        
+#include <string_view>   
 
 /* fairly convoluted but container_of can help you move "backwards" in inheritance hierarchies or class containment to find the parent class or container.
 

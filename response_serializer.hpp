@@ -1,6 +1,12 @@
 #ifndef RESPONSE_SERIALIZER_HPP
 #define RESPONSE_SERIALIZER_HPP
 
+#include <vector>        
+#include <cstdint>       
+#include <string_view>  
+#include <cstring>      
+#include <type_traits>   
+
 #include "common.hpp"
 
 class ResponseSerializer {

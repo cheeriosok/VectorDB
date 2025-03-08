@@ -1,14 +1,15 @@
 #ifndef AVL_TREE_HPP
 #define AVL_TREE_HPP
 
-#include <cstdint>
-#include <memory>
-#include <optional>
-#include <algorithm>
-
 // Our node class contains two unique pointers to left and right, a raw pointer to parent, and depth + weight values for rebalancing.
 // depth = (how far down the tree we are), weight = how many nodes in its subtree (nodes below this node). AVLTree will modify these 2
 // so I will call it a friend class.
+
+#include <memory>    
+#include <algorithm> 
+#include <cstdint>   
+#include <utility>   
+#include <cstddef>
 
 template<typename T>
 class AVLNode {
@@ -284,4 +285,4 @@ private:
     }
 };
 
-#endif // AVL_TREE_HPP
+#endif 

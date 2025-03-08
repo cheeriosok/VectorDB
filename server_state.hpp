@@ -1,18 +1,27 @@
 #ifndef SERVER_STATE_HPP
 #define SERVER_STATE_HPP
 
-#include <thread>
+#include <memory>         
+#include <vector>         
+#include <unordered_map>  
+#include <cstdint>        
+#include <shared_mutex>   
+#include <expected>       
+#include <system_error>   
+#include <poll.h>         
 #include "socket.hpp"
 #include "thread_pool.hpp"
-#include "heap.hpp"
 #include "connection.hpp"
 #include "socket.hpp"
 #include "server.hpp"
 #include "hashtable.hpp"
 #include "heap.hpp"
 #include "thread_pool.hpp"
-#include <vector.hpp>
 // server state manages all active connectons, db and background tasks.
+
+template<typename T>
+using Result = std::expected<T, std::error_code>;
+
 class ServerState {
     public:
         // default constructor.

@@ -1,10 +1,17 @@
 #ifndef REQUEST_PARSER_HPP
 #define REQUEST_PARSER_HPP
 
-#include <cstdint>
-#include <cstring>
-#include <system_error>
+#include <vector>       // For std::vector
+#include <string>       // For std::string
+#include <cstdint>      // For uint8_t, uint32_t
+#include <span>         // For std::span
+#include <expected>     // For std::expected (C++23)
+#include <system_error> // For std::error_code, std::errc, std::make_error_code
+#include <cstring>      // For std::memcpy
 #include "connection.hpp"
+
+template<typename T>
+using Result = std::expected<T, std::error_code>;
 
 // request parser class responsible for parsing incoming data into command components
 class RequestParser {

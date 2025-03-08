@@ -3,14 +3,26 @@ static constexpr size_t MAX_MSG_SIZE = 4096; // Maximum message size (4KB)
 static constexpr auto IDLE_TIMEOUT = std::chrono::milliseconds(5000); // 5-second timeout for idle connections
 static constexpr uint16_t SERVER_PORT = 4321; // The port number the server will listen on
 
-#include <iostream>
-#include <error>
-#include <thread>
+#include <memory>         
+#include <vector>         
+#include <unordered_map>  
+#include <cstdint>        
+#include <shared_mutex>   
+#include <expected>      
+#include <system_error>   
+#include <poll.h>         
 #include "logging.hpp"
 #include "socket.hpp"
 #include "heap.hpp"
 #include "socket.hpp"
 #include "list.hpp"
+#include "connection.hpp"
+#include "hashtable.hpp"
+#include "heap.hpp"
+#include "thread_pool.hpp"
+
+template<typename T>
+using Result = std::expected<T, std::error_code>;
 
 // server class - manages socket creation, polling, and connection handling
 class Server {
