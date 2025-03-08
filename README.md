@@ -3,6 +3,9 @@
 ## Overview
 This project is a high-performance, networked key-value store that supports **hash maps, sorted sets (ZSets), TTL-based expiration, and efficient multi-threading** using a thread pool. The system is designed with **modern C++ (C++20)**, leveraging **RAII, std::expected, spans, and shared mutexes** to ensure optimal performance and safety.
 
+Currently, this project is still **in progress** and is flled with non-functional boilerplate. 
+It is frankly more ambitious than I would have liked it to be - but it will serve as the foundation for a feature store in the future and a follow-up vector database (my next endeavor).
+
 ### Key Features
 - **Asynchronous Networking:** Uses non-blocking I/O (`poll`) for efficient connection handling.
 - **Thread Pool:** Optimized for multi-threading with worker threads.
@@ -16,17 +19,16 @@ This project is a high-performance, networked key-value store that supports **ha
 ## Project Structure
 ```
 /project
-    ├── include/                # Header-only library
-    │   ├── command_processor.hpp   # Command parsing & execution
-    │   ├── common.hpp              # Common utilities and constants
-    │   ├── connection.hpp          # Client connection handling
-    │   ├── entry_manager.hpp       # Key-value store logic
-    │   ├── logging.hpp             # Logger utility
-    │   ├── request_parser.hpp      # Request parsing logic
-    │   ├── response_serializer.hpp # Response formatting
-    │   ├── server_state.hpp        # Global server state management
-    │   ├── server.hpp              # Main server class
-    │   ├── socket.hpp              # RAII-based socket wrapper
+    ├── command_processor.hpp   # Command parsing & execution
+    ├── common.hpp              # Common utilities and constants
+    ├── connection.hpp          # Client connection handling
+    ├── entry_manager.hpp       # Key-value store logic
+    ├── logging.hpp             # Logger utility
+    ├── request_parser.hpp      # Request parsing logic
+    ├── response_serializer.hpp # Response formatting
+    ├── server_state.hpp        # Global server state management
+    ├── server.hpp              # Main server class
+    ├── socket.hpp              # RAII-based socket wrapper
     ├── thread_pool.hpp         # Multi-threaded task execution
     ├── heap.hpp                # TTL handling with min-heap
     ├── zset.hpp                # Sorted set (ZSet) data structure
@@ -40,7 +42,7 @@ This project is a high-performance, networked key-value store that supports **ha
 
 ## Installation & Build
 ### **Requirements**
-- **C++20 compiler** (GCC 11+/Clang 14+/MSVC 19.3+)
+- **C++23 compiler** (GCC 11+/Clang 14+/MSVC 19.3+)
 - **CMake 3.20+**
 - **Linux/macOS (or WSL on Windows)**
 
