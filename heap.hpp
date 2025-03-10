@@ -7,40 +7,13 @@
 #include <memory>
 #include <stdexcept>
 
-namespace ds {
-
 template<typename T>
-class HeapItem {
-public:
-    HeapItem() = default;
-    explicit HeapItem(T value) : value_(std::move(value)) {} // constructor with T value argument -> take rvalue as input, and position_ref remians null
-
-    // classic delete copy operations
-    HeapItem(const HeapItem&) = delete;
-    HeapItem& operator=(const HeapItem&) = delete;
-
-    // set move operations as default
-    HeapItem(HeapItem&& other) noexcept = default;
-    HeapItem& operator=(HeapItem&& other) noexcept = default;
-
-    // getter
-    [[nodiscard]] const T& value() const noexcept { return value_; } //throw compiler warning if return value unused
-    T& value() noexcept { return value_; } //non-const accessor
-    // setter
-    void set_position(std::size_t* pos) noexcept { position_ref_ = pos; } // set position_ref_ pointer to track the item's position in the heap.
-
-private:
-    T value_{}; // value in heap
-    std::size_t* position_ref_{nullptr}; // pointer to the position of this item in heap
-
-    friend class BinaryHeap<T>; // provide access/mod to BinaryHeap
-};
+class HeapItem;
 
 template<typename T, typename Compare = std::less<T>>
 class BinaryHeap {
 public:
-    BinaryHeap() = default;
-    explicit BinaryHeap(const Compare& comp = Compare{}) : compare_(comp) {} // This constructor takes in a comparator function!
+    explicit BinaryHeap(const Compare& comp) : compare_(comp) {}
     
     void push(HeapItem<T> item) { // push method = push HeapItem<T> item to the back of our vector - we sift locations up accordingly thereafter
         items_.push_back(std::move(item));
@@ -182,6 +155,34 @@ private:
     }
 };
 
-} // namespace ds
+
+template<typename T>
+class HeapItem {
+public:
+    HeapItem() = default;
+    explicit HeapItem(T value) : value_(std::move(value)) {} // constructor with T value argument -> take rvalue as input, and position_ref remians null
+
+    // classic delete copy operations
+    HeapItem(const HeapItem&) = delete;
+    HeapItem& operator=(const HeapItem&) = delete;
+
+    // set move operations as default
+    HeapItem(HeapItem&& other) noexcept = default;
+    HeapItem& operator=(HeapItem&& other) noexcept = default;
+
+    // getter
+    [[nodiscard]] const T& value() const noexcept { return value_; } //throw compiler warning if return value unused
+    T& value() noexcept { return value_; } //non-const accessor
+    [[nodiscard]] size_t* position() const noexcept { return position_ref_; }
+    size_t* position() noexcept { return position_ref_; }
+    // setter
+    void set_position(std::size_t* pos) noexcept { position_ref_ = pos; } // set position_ref_ pointer to track the item's position in the heap.
+
+private:
+    T value_{}; // value in heap
+    std::size_t* position_ref_{nullptr}; // pointer to the position of this item in heap
+
+    friend class BinaryHeap<T>; // provide access/mod to BinaryHeap
+};
 
 #endif // HEAP_HPP

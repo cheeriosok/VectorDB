@@ -1,8 +1,6 @@
 #ifndef LIST_HPP //
 #define LIST_HPP
 
-namespace ds {
-
 // Forward declaration of DoubleLinkedList for ListNode to friend it
 template<typename T>
 class DoublyLinkedList;
@@ -34,7 +32,7 @@ public:
     void insert_after(ListNode& node) noexcept { // our current listNode has this method to insert "node" after it. Same logic as above but reversed.
         node.prev_ = this; // ""
         node.next_ = next_; // ""
-        next_->prev = &node; // ""
+        next_->prev_ = &node; // ""
         next_ = &node; // ""
     }
 
@@ -132,7 +130,5 @@ public:
 private:
     ListNode<T> head_; // sentinel node
 };
-
-} // namespace ds
 
 #endif // LIST_HPP
