@@ -1,7 +1,7 @@
 # High-Performance Networked Key-Value Store
 
 ## Overview
-This project is a high-performance, networked key-value store that supports **hash maps, sorted sets (ZSets), TTL-based expiration, and efficient multi-threading** using a thread pool. The system is designed with **modern C++ (C++20)**, leveraging **RAII, std::expected, spans, and shared mutexes** to ensure optimal performance and safety.
+This project is a high-performance, networked key-value store that supports **hash maps, sorted sets (ZSets), TTL-based expiration, and efficient multi-threading** using a thread pool. The system is designed with **modern C++ (C++23)**, leveraging **RAII, std::expected, spans, and shared mutexes** to ensure optimal performance and safety.
 
 Currently, this project is still **in progress** and is flled with non-functional boilerplate. 
 It is frankly more ambitious than I would have liked it to be - but it will serve as the foundation for a feature store in the future and a follow-up vector database (my next endeavor).
