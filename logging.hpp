@@ -1,31 +1,32 @@
 #ifndef LOGGING_HPP
 #define LOGGING_HPP
 
-#include <iostream>        
-#include <string_view>     
-#include <chrono>         
-#include <ctime>          
-#include <source_location> 
-#include <format>        
+#include <iostream>
+#include <string_view>
+#include <chrono>
+#include <ctime>
+#include <source_location>
+#include <format>
 
-
-// variadic templates for multiple arguments.
 template<typename... Args>
-void log_message(std::string_view format, 
-                 const Args&... args,
-                 const std::source_location& location = std::source_location::current()) {
-
-    auto time_t_val = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()); // Get the current time and convert to "time_t".
-    char time_str[20]; // create a buffer of characters. 
+void log_message_impl(std::string_view format, const std::source_location& location, const Args&... args) {
+    auto time_t_val = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    char time_str[20];
     std::strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", std::localtime(&time_t_val));
 
-    std::cerr << std::format("[{}] {}:{} - ", 
-                             time_str, 
-                             location.file_name(), 
-                             location.line());
-
+    std::cerr << std::format("[{}] {}:{} - ", time_str, location.file_name(), location.line());
     std::cerr << std::vformat(format, std::make_format_args(args...)) << '\n';
 }
+
+template<typename... Args>
+void log_message(std::string_view format, const Args&... args) {
+    log_message_impl(format, std::source_location::current(), args...);
+}
+
+#endif // LOGGING_HPP
+
+
+
 
 /*
 
@@ -39,4 +40,3 @@ Output:
 
 */
 
-#endif 

@@ -11,11 +11,15 @@
 #include <algorithm>
 #include <utility>
 #include <mutex>         // std::mutex for thread safety
-#include "hashtable.hpp"
-#include "heap.hpp"
-#include "zset.hpp"
+#include "src/hashtable.hpp"
+#include "src/heap.hpp"
+#include "src/zset.hpp"
 #include "entry_manager.hpp"
 #include "response_serializer.hpp"
+
+constexpr int ERR_ARG = -1;
+constexpr int ERR_UNKNOWN = -2;
+constexpr int ERR_TYPE = -3;
 
 // modern command processor with type-safe command handling
 class CommandProcessor {
@@ -24,8 +28,8 @@ public:
     struct CommandContext {
         const std::vector<std::string>& args; // reference to command arguments
         std::vector<uint8_t>& response;       // reference to response buffer
-        HMap& db;                             // reference to database
-        std::vector<HeapItem>& heap;          // reference to heap
+        HMap<std::string, Entry>& db;                             // reference to database
+        BinaryHeap<uint64_t>& heap;            // reference to heap
         std::mutex& db_mutex;                 // mutex for thread-safe operations
     };
 

@@ -35,27 +35,6 @@ public:
             throw; // rethrow an exception
         }
     }
-
-        /*
-        Joining before ending reasons:
-        If ThreadPool is destroyed without joining threads, the threads:
-        Might try to access memory that no longer exists.
-        Could cause undefined behavior or crashes.
-        */
-        ~ThreadPool() {
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                stop = true;
-            }
-            condition_.notify_all();
-        
-            for (auto& thread : threads_) {
-                if (thread.joinable()) {
-                    thread.join();
-                }
-            }
-        }
-        
        
     // delete copy constructor 3 reasons - we're dealing with shared states, threads cant be copied and concurrency makes copying unsafe
     ThreadPool(const ThreadPool&) = delete; 
@@ -63,8 +42,21 @@ public:
     // default move constructor - if necessary to transfer ownership we default this behavior! 
     ThreadPool(ThreadPool&&) noexcept = delete;
     ThreadPool& operator=(ThreadPool&&) noexcept = delete;
-
-
+    
+    ~ThreadPool() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stop = true;
+        }
+        condition_.notify_all();
+        
+        for (auto& thread : threads_) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+    }
+        
     template<typename F, typename... Args>
     auto enqueue(F&& f, Args&&... args) {
         using return_type = std::invoke_result_t<F, Args...>; // Fix: Explicitly declare return_type
@@ -101,6 +93,7 @@ public:
         condition_.wait(lock, [this] { return tasks_.empty() && active_workers_.load() == 0; });
     }
     
+    
     void shutdown() {
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -129,10 +122,6 @@ void worker() {
         condition_.notify_all(); // Notify that a task is done
     }
 }
-
-
-
-
 
     std::vector<std::thread> threads_;
     std::queue<std::function<void()>> tasks_; // a queue of tasks! 

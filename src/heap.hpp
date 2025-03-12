@@ -15,6 +15,13 @@ class BinaryHeap {
 public:
     explicit BinaryHeap(const Compare& comp) : compare_(comp) {}
     
+    HeapItem<T>& operator[](std::size_t index) {
+        if (index >= items_.size()) {
+            throw std::out_of_range("Index out of range");
+        }
+        return items_[index];
+    }    
+
     void push(HeapItem<T> item) { // push method = push HeapItem<T> item to the back of our vector - we sift locations up accordingly thereafter
         items_.push_back(std::move(item));
         sift_up(items_.size() - 1);
@@ -43,6 +50,12 @@ public:
         return result;
     }
 
+    void pop_back() {
+        if (!items_.empty()) {
+            items_.pop_back();
+        }
+    }    
+
     void update(std::size_t pos) {
         if (pos >= items_.size()) {
             throw std::out_of_range("Position out of range");
@@ -54,6 +67,19 @@ public:
             sift_down(pos);
         }
     }
+
+    void swap(std::size_t i, std::size_t j) {
+        if (i >= items_.size() || j >= items_.size()) {
+            throw std::out_of_range("swap: Invalid index");
+        }
+        std::swap(items_[i], items_[j]);
+    
+        // Update position tracking if necessary
+        if (items_[i].position_ref_) *items_[i].position_ref_ = i;
+        if (items_[j].position_ref_) *items_[j].position_ref_ = j;
+    }
+
+    
 
     [[nodiscard]] bool empty() const noexcept { return items_.empty(); }
     [[nodiscard]] std::size_t size() const noexcept { return items_.size(); }
@@ -160,6 +186,9 @@ template<typename T>
 class HeapItem {
 public:
     HeapItem() = default;
+    explicit HeapItem(T value, std::size_t* position_ref = nullptr) 
+        : value_(std::move(value)), position_ref_(position_ref) {}
+
     explicit HeapItem(T value) : value_(std::move(value)) {} // constructor with T value argument -> take rvalue as input, and position_ref remians null
 
     // classic delete copy operations
@@ -177,7 +206,7 @@ public:
     size_t* position() noexcept { return position_ref_; }
     // setter
     void set_position(std::size_t* pos) noexcept { position_ref_ = pos; } // set position_ref_ pointer to track the item's position in the heap.
-
+    void set_value(T new_value) noexcept { value_ = std::move(new_value); }
 private:
     T value_{}; // value in heap
     std::size_t* position_ref_{nullptr}; // pointer to the position of this item in heap

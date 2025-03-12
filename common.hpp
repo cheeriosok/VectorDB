@@ -33,7 +33,7 @@ enum class SerializationType : uint8_t {
 
 template<typename T>
 constexpr SerializationType get_serialization_type() {
-    if constexpr (std::is_integral_v<T>) {
+    if constexpr (std::is_integral_v<T> && !std::is_same_v<T, char> && !std::is_same_v<T, signed char> && !std::is_same_v<T, unsigned char>) {
         return SerializationType::Integer;
     } else if constexpr (std::is_floating_point_v<T>) {
         return SerializationType::Double;
@@ -43,5 +43,6 @@ constexpr SerializationType get_serialization_type() {
         return SerializationType::Nil;
     }
 }
+
 
 #endif 

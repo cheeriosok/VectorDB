@@ -164,7 +164,7 @@ Result<bool> Connection::try_fill_buffer() {
     return true;
 }
 
-// processes a request if the read buffer contains enough data
+processes a request if the read buffer contains enough data
 Result<bool> Connection::try_process_request() {
     if (rbuf_.size() < sizeof(uint32_t)) {
         return false; // not enough data to process a request
@@ -233,3 +233,4 @@ Result<bool> Connection::try_flush_buffer() {
     
     return true;
 }
+#endif

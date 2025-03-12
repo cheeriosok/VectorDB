@@ -12,7 +12,6 @@ static constexpr uint16_t SERVER_PORT = 4321; // The port number the server will
 #include <system_error>   
 #include <poll.h>         
 #include "logging.hpp"
-#include "socket.hpp"
 #include "heap.hpp"
 #include "socket.hpp"
 #include "list.hpp"
@@ -296,7 +295,7 @@ class Server {
         mutable std::shared_mutex connections_mutex_; // synchronization for managing connections
         std::unordered_map<int, std::unique_ptr<Connection>> connections_; // active connections
     
-        DList idle_list_; // list of idle connections (for timeouts)
+        DoublyLinkedList idle_list_; // list of idle connections (for timeouts)
         HMap db_; // database (hash map) for managing server state
-        std::vector<HeapItem> heap_; // heap for tracking time-based events
+        BinaryHeap heap_; // heap for tracking time-based events
     };

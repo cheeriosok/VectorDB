@@ -46,12 +46,12 @@ public:
     Result<void> set_nonblocking() const {
         int flags = fcntl(fd_, F_GETFL, 0); // get current flags
         if (flags == -1) { // check for errors
-            return std::unexpected(std::make_error_code(std::errc::io_error));
+            return std::unexpected(std::make_error_code(static_cast<std::errc>(errno)));
         }
         
         flags |= O_NONBLOCK; // enable non-blocking mode
         if (fcntl(fd_, F_SETFL, flags) == -1) { // apply new flags
-            return std::unexpected(std::make_error_code(std::errc::io_error));
+            return std::unexpected(std::make_error_code(static_cast<std::errc>(errno)));
         }
         
         return {}; // success

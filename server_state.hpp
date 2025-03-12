@@ -76,7 +76,7 @@ class ServerState {
         Socket listen_socket_{-1}; // main listening socket for new connections, default init with arg -1
         std::unordered_map<int, std::unique_ptr<Connection>> connections_; // active client connections
         HMap db_; // map for database storage (k/v store)
-        std::vector<HeapItem> heap_; // heap for managing scheduled tasks/timeouts
+        BinaryHeap heap_; // heap for managing scheduled tasks/timeouts
         ThreadPool thread_pool_{4}; // defaul init thread_pool to 4 worker threads.
     };
     

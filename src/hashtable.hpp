@@ -179,6 +179,12 @@ public:
     [[nodiscard]] size_t capacity() const noexcept { return mask_ + 1; } 
     bool empty() const noexcept { return size_ == 0; } 
 
+    void clear() {
+        buckets_.clear();  
+        size_ = 0;
+        mask_ = 0;
+    }
+    
 private:
     std::vector<std::unique_ptr<HNode<K,V>>> buckets_; 
     size_t mask_{0}; 
@@ -297,7 +303,13 @@ public:
     }
     
     bool empty() const noexcept { return size() == 0; } // method for checking if the above size()==0, for convenience.
-
+    
+    void clear() {
+        primary_table_.clear();  // Clear primary hash table
+        temporary_table_.reset();  // Remove temporary table if resizing
+        resizing_pos_ = 0;  // Reset migration position
+    }
+    
 private:
     static constexpr size_t max_work = 15; // 15 transfers per help_resize call 
     static constexpr size_t k_max_load_factor = 8; // Max Average of 8 nodes per bucket before start_resize is called!
