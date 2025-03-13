@@ -38,8 +38,8 @@ class RequestParser {
             std::memcpy(&len, data.data(), sizeof(uint32_t));
         
         
-            // Convert endianness if needed
-            len = __builtin_bswap32(len);  // If needed based on your system
+            // Convert endianness
+            len = __builtin_bswap32(len);  
         
         
             if (sizeof(uint32_t) + len > data.size()) {

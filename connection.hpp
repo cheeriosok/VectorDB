@@ -1,104 +1,85 @@
 #ifndef CONNECTION_HPP
 #define CONNECTION_HPP
 
-#include <cstdint>        // uint8_t, uint16_t, uint32_t
-#include <vector>         // std::vector
-#include <chrono>         // std::chrono::steady_clock, std::chrono::milliseconds
-#include <system_error>   // std::error_code, std::make_error_code, std::errc
-#include <expected>       // std::expected (C++23) or equivalent custom implementation
-#include <cassert>        // assert()
-#include <span>           // std::span (C++20)
-#include <algorithm>      // std::copy
-#include <unistd.h>       // read(), write()
-#include <cerrno>         // errno, EINTR, EAGAIN
+#include <cstdint>        
+#include <vector>         
+#include <chrono>         
+#include <system_error>   
+#include <expected>       
+#include <cassert>       
+#include <span>           
+#include <algorithm>      
+#include <unistd.h>       
+#include <cerrno>         
+#include <mutex>          
 
-#include "socket.hpp"               // Definition of `Socket` class
-#include "request_parser.hpp"       // `RequestParser::parse()`
-#include "response_serializer.hpp"  // `ResponseSerializer::append_data()`
-#include "command_processor.hpp"    // `process_command()`
+#include "socket.hpp"               
+#include "request_parser.hpp"       
+#include "response_serializer.hpp"  
+#include "command_processor.hpp"   
+#include "entry_manager.hpp"        
+
+static constexpr size_t MAX_MSG_SIZE = 4096; 
+static constexpr auto IDLE_TIMEOUT = std::chrono::milliseconds(5000); 
+static constexpr uint16_t SERVER_PORT = 4321; 
 
 
-// defines the different states a connection can be in
 enum class ConnectionState : uint8_t {
-    Request,  // Waiting for a request from the client
-    Response, // Processing and sending response
-    End       // Connection is closing
+    Request,  
+    Response, 
+    End       
 };
 
-// modern error handling using std::expected for better error management
 template<typename T>
 using Result = std::expected<T, std::error_code>;
 
-// constants defining buffer sizes and timeout settings
-static constexpr size_t MAX_MSG_SIZE = 4096; // Maximum message size
-static constexpr auto IDLE_TIMEOUT = std::chrono::milliseconds(5000); // Timeout for idle connections
-static constexpr uint16_t SERVER_PORT = 1234; // Default server port
-
-// connection class implementing RAII (Resource Acquisition Is Initialization) for socket management
 class Connection {
     public:
-        // constructor initializing socket, state, and idle start time
-        explicit Connection(Socket socket) 
-            : socket_(std::move(socket))
-            , state_(ConnectionState::Request)
-            , idle_start_(std::chrono::steady_clock::now()) {
-            rbuf_.reserve(MAX_MSG_SIZE); // reserve space for read buffer
-            wbuf_.reserve(MAX_MSG_SIZE); // rserve space for write buffer
+        Connection(Socket socket, EntryManager& entry_manager, std::shared_mutex& db_mutex, CommandProcessor& processor)
+            : socket_(std::move(socket)), 
+              entry_manager_(entry_manager), 
+              db_mutex_(db_mutex),  x
+              command_processor_(processor),
+              state_(ConnectionState::Request),
+              idle_start_(std::chrono::steady_clock::now()) {
+            rbuf_.reserve(MAX_MSG_SIZE);
+            wbuf_.reserve(MAX_MSG_SIZE);
         }
-        
-        // getter - returns the file descriptor of the socket
-        [[nodiscard]] int fd() const noexcept { return socket_.get(); }
-        
-        // getter - returns the current connection state
-        [[nodiscard]] ConnectionState state() const noexcept { return state_; }
-        
-        // getter - returns the duration the connection has been idle
-        [[nodiscard]] auto idle_duration() const noexcept {
-            return std::chrono::steady_clock::now() - idle_start_;
-        }
-        
-        // setter- updates the idle start time to the current time
-        void update_idle_time() noexcept {
-            idle_start_ = std::chrono::steady_clock::now();
-        }
-        
-        // declare process_io processes 
-        Result<void> process_io();
-        
-    private:
-        Socket socket_; // socket for communication
-        ConnectionState state_; // current connection state
-        std::chrono::steady_clock::time_point idle_start_; // last activity timestamp
-        std::vector<uint8_t> rbuf_; // read buffer
-        std::vector<uint8_t> wbuf_; // write buffer
-        size_t wbuf_sent_{0}; // tracks the amount of data sent
-        
-        // handles request processing
-        Result<void> handle_request();
-        
-        // handles response processing
-        Result<void> handle_response();
-        
-        // attempts to fill the read buffer with incoming data
-        Result<bool> try_fill_buffer();
-        
-        // attempts to flush the write buffer to the client
-        Result<bool> try_flush_buffer();
-        
-        // attempts to process a request if enough data is available
-        Result<bool> try_process_request();
+    
+
+    [[nodiscard]] int fd() const noexcept { return socket_.get(); }  
+    [[nodiscard]] ConnectionState state() const noexcept { return state_; }  
+    [[nodiscard]] auto idle_start() const noexcept { return idle_start_; }  
+    
+    void update_idle_time() noexcept { idle_start_ = std::chrono::steady_clock::now(); } 
+    Result<void> process_io();
+
+private:
+    Socket socket_;  
+    EntryManager& entry_manager_;  
+    std::shared_mutex& db_mutex_;  
+    CommandProcessor& command_processor_;  
+    ConnectionState state_; 
+    std::chrono::steady_clock::time_point idle_start_;  
+    std::vector<uint8_t> rbuf_;  
+    std::vector<uint8_t> wbuf_; 
+    size_t wbuf_sent_{0};  
+
+    Result<void> handle_request();
+    Result<void> handle_response();
+    Result<bool> try_fill_buffer();
+    Result<bool> try_flush_buffer();
+    Result<bool> try_process_request();
 };
 
-// implementation of connection member functions
-Result<void> Connection::process_io() {
-    update_idle_time(); // update idle time to current time
-    
-    // switch on connection state to determine what to process
+inline Result<void> Connection::process_io() {
+    update_idle_time();
+
     switch (state_) {
         case ConnectionState::Request:
-            return handle_request(); // Process client request
+            return handle_request(); 
         case ConnectionState::Response:
-            return handle_response(); // Process server response
+            return handle_response(); 
         case ConnectionState::End:
             return std::unexpected(std::make_error_code(std::errc::connection_aborted));
         default:
@@ -106,94 +87,89 @@ Result<void> Connection::process_io() {
     }
 }
 
-// handles incoming client requests
-Result<void> Connection::handle_request() {
+inline Result<void> Connection::handle_request() {
     while (true) {
-        auto result = try_fill_buffer(); // attempt to read data into buffer (see method below)
+        auto result = try_fill_buffer(); 
         if (!result) {
-            return std::unexpected(result.error()); // return error if read fails
+            return std::unexpected(result.error()); 
         }
         if (!*result) {
-            break; // stop if no more data is available
+            break; 
         }
     }
     return {};
 }
 
-// handles sending responses back to the client
-Result<void> Connection::handle_response() {
+inline Result<void> Connection::handle_response() {
     while (true) {
-        auto result = try_flush_buffer(); // attempt to write data to socket
+        auto result = try_flush_buffer(); 
         if (!result) {
-            return std::unexpected(result.error()); // return error if write fails
+            return std::unexpected(result.error());
         }
         if (!*result) {
-            break; // stop if no more data to write
+            break; 
         }
     }
     return {};
 }
 
-// attempts to read data into the read buffer
-Result<bool> Connection::try_fill_buffer() {
-    assert(rbuf_.size() < MAX_MSG_SIZE); // throw an error if we've exceeded max_msg_size
+inline Result<bool> Connection::try_fill_buffer() {
+    assert(rbuf_.size() < MAX_MSG_SIZE); 
     
-    rbuf_.resize(MAX_MSG_SIZE); //
     ssize_t rv;
     do {
-        size_t capacity = rbuf_.size() - rbuf_.size();
+        size_t capacity = MAX_MSG_SIZE - rbuf_.size();
         rv = read(socket_.get(), rbuf_.data() + rbuf_.size(), capacity);
     } while (rv < 0 && errno == EINTR);
     
     if (rv < 0) {
         if (errno == EAGAIN) {
-            return false; // no data available, try again later
+            return false; 
         }
-        return std::unexpected(std::make_error_code(std::errc::io_error)); // return error on failure
+        return std::unexpected(std::make_error_code(std::errc::io_error)); 
     }
     
     if (rv == 0) {
-        state_ = ConnectionState::End; // mark connection as closed if no data read
+        state_ = ConnectionState::End; 
         return false;
     }
-    
+
     rbuf_.resize(rbuf_.size() + rv);
     
-    while (try_process_request()) {} // process available requests
+    while (try_process_request()) {} 
     
     return true;
 }
 
-processes a request if the read buffer contains enough data
-Result<bool> Connection::try_process_request() {
+inline Result<bool> Connection::try_process_request() {
     if (rbuf_.size() < sizeof(uint32_t)) {
-        return false; // not enough data to process a request
+        return false; 
     }
     
     auto parse_result = RequestParser::parse(std::span(rbuf_));
     if (!parse_result) {
-        state_ = ConnectionState::End; // nd connection if parsing fails
+        state_ = ConnectionState::End; 
         return false;
     }
     
     auto& cmd = *parse_result;
     
-    // process command and generate response
     std::vector<uint8_t> response;
-    process_command(cmd, response);
+    CommandProcessor::CommandContext ctx{
+        cmd, response, entry_manager_, db_mutex_
+    };
     
-    // prepare write buffer
+    command_processor_.process_command(ctx);
+    
     uint32_t wlen = static_cast<uint32_t>(response.size());
     wbuf_.clear();
     wbuf_.reserve(sizeof(wlen) + response.size());
     ResponseSerializer::append_data(wbuf_, wlen);
     wbuf_.insert(wbuf_.end(), response.begin(), response.end());
-    
-    // update state to response
+
     state_ = ConnectionState::Response;
     wbuf_sent_ = 0;
     
-    // remove processed data from read buffer
     size_t consumed = sizeof(uint32_t) + cmd.size();
     if (consumed < rbuf_.size()) {
         std::copy(rbuf_.begin() + consumed, rbuf_.end(), rbuf_.begin());
@@ -205,8 +181,7 @@ Result<bool> Connection::try_process_request() {
     return rbuf_.size() >= sizeof(uint32_t);
 }
 
-// attempts to flush data from the write buffer to the socket
-Result<bool> Connection::try_flush_buffer() {
+inline Result<bool> Connection::try_flush_buffer() {
     while (wbuf_sent_ < wbuf_.size()) {
         ssize_t rv;
         do {
@@ -216,7 +191,7 @@ Result<bool> Connection::try_flush_buffer() {
         
         if (rv < 0) {
             if (errno == EAGAIN) {
-                return false; // no data written, try again later
+                return false;
             }
             return std::unexpected(std::make_error_code(std::errc::io_error));
         }
@@ -225,7 +200,7 @@ Result<bool> Connection::try_flush_buffer() {
     }
     
     if (wbuf_sent_ == wbuf_.size()) {
-        state_ = ConnectionState::Request; // reset to request state after sending
+        state_ = ConnectionState::Request; 
         wbuf_sent_ = 0;
         wbuf_.clear();
         return false;
@@ -233,4 +208,5 @@ Result<bool> Connection::try_flush_buffer() {
     
     return true;
 }
-#endif
+
+#endif // CONNECTION_HPP

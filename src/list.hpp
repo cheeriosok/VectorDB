@@ -126,6 +126,9 @@ public:
     void push_back(ListNode<T>& node) noexcept {  // use ListNode insert_after method to push to the back of head.
         head_.insert_before(node);
     }
+    [[nodiscard]] T* front() noexcept {
+        return empty() ? nullptr : static_cast<T*>(head_.next_->data());
+    }
 
 private:
     ListNode<T> head_; // sentinel node

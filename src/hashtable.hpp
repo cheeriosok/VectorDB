@@ -162,7 +162,7 @@ public:
 
     std::unique_ptr<HNode<K, V>> steal_first_node(size_t& pos) {
         while (pos < buckets_.size() && !buckets_[pos]) {
-            pos++;  // Skip empty buckets
+            pos++; 
         }
     
         if (pos >= buckets_.size()) {

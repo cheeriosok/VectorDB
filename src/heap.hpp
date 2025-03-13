@@ -79,8 +79,10 @@ public:
         if (items_[j].position_ref_) *items_[j].position_ref_ = j;
     }
 
+    void clear() {
+        items_.clear();  
+    }
     
-
     [[nodiscard]] bool empty() const noexcept { return items_.empty(); }
     [[nodiscard]] std::size_t size() const noexcept { return items_.size(); }
     

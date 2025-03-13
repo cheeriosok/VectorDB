@@ -1,138 +1,189 @@
 #ifndef ENTRY_MANAGER_HPP
 #define ENTRY_MANAGER_HPP
 
-#include <cstdint>       // int64_t, uint64_t
-#include <memory>        // std::unique_ptr
-#include <unordered_map> // std::unordered_map
-#include <functional>    // std::function (used in thread pool)
+#include <cstdint>       
+#include <memory>        
+#include <unordered_map>
+#include <unordered_set>
+#include <functional>            
+#include <string>        
+#include <optional>      
+#include <chrono>        
+#include <iostream>
+#include <type_traits>
+#include <mutex>
+#include "common.hpp"
 #include "response_serializer.hpp" 
 #include "src/heap.hpp"               
 #include "src/thread_pool.hpp"   
-#include "src/zset.hpp"      // Sorted Set (ZSet) support
-#include "common.hpp"           
-#include <string>        // std::string
-#include <memory>        // std::unique_ptr
-#include <optional>      // std::optional
-#include <chrono>        // For std::chrono
+#include "src/zset.hpp"             
+#include "src/hashtable.hpp"
 
-inline uint64_t get_monotonic_usec() {
+template <typename T>
+struct IsValidType : std::disjunction<
+    std::is_same<T, std::string>,                             
+    std::is_same<T, int64_t>,                                 
+    std::is_same<T, double>,                                  
+    std::is_same<T, std::vector<std::string>>,               
+    std::is_same<T, std::unordered_map<std::string, std::string>>, 
+    std::is_same<T, std::unordered_set<std::string>>,        
+    std::is_same<T, std::unique_ptr<ZSet>>> {};              
+
+    inline uint64_t get_monotonic_usec() {
     return std::chrono::duration_cast<std::chrono::microseconds>(
                std::chrono::steady_clock::now().time_since_epoch())
         .count();
 }
 
-class Entry {
+class EntryBase {
 public:
-    std::string key;                      // The key for this entry
-    std::string value;                    // The value associated with the key
-    std::unique_ptr<ZSet> zset;            // Optional sorted set (if applicable)
-    size_t heap_idx = static_cast<size_t>(-1); // Heap index for TTL management (-1 if not in heap)
+    virtual ~EntryBase() = default;
+    virtual void print() const = 0;
+    size_t heap_idx = static_cast<size_t>(-1);
+    std::string key;
+};
 
-    // Constructor for string-based key-value pairs
-    explicit Entry(std::string k, std::string v)
-        : key(std::move(k)), value(std::move(v)), zset(nullptr) {}
+template <typename T, typename = std::enable_if_t<IsValidType<T>::value>>
+class Entry : public EntryBase {
+public:    
+    T value; 
 
-    // Constructor for sorted set entries
-    explicit Entry(std::string k, std::unique_ptr<ZSet> zs)
-        : key(std::move(k)), zset(std::move(zs)) {}
+    explicit Entry(std::string k, T v) : value(std::move(v)) {
+        key = std::move(k);
+    }
 
-    // Destructor to manage memory
-    ~Entry() = default;
+    Entry(Entry&&) noexcept = default;
+    Entry& operator=(Entry&&) noexcept = default;
 
-    // Disable copying to prevent accidental duplication
     Entry(const Entry&) = delete;
     Entry& operator=(const Entry&) = delete;
 
-    // Move constructor and move assignment for efficiency
-    Entry(Entry&&) noexcept = default;
-    Entry& operator=(Entry&&) noexcept = default;
+    void print() const override {
+        if constexpr (std::is_same<T, std::unique_ptr<ZSet>>::value) {
+            std::cout << "Key: " << key << " -> ZSet (Sorted Set) {" << std::endl;
+            if (value) {
+                std::lock_guard<std::mutex> lock(value->mutex_);
+                for (const auto& node : value->nodes_) {
+                    std::cout << "  " << node->get_key() << ": " << node->get_value() << std::endl;
+                }
+            } else {
+                std::cout << "  (empty ZSet)" << std::endl;
+            }
+            std::cout << "}" << std::endl;
+        } else {
+            std::cout << "Key: " << key << " -> " << value << std::endl;
+        }
+    }
 };
 
 class EntryManager {
-public:
-    // Function to safely destroy an entry
-    static void destroy_entry(Entry* entry) {
-        if (!entry) return;
-        delete entry;
-    }
-
-    // Function to delete an entry asynchronously using a thread pool
-    static void delete_entry_async(Entry* entry, ThreadPool& pool) {
-        if (!entry) return;
-        pool.enqueue([entry]() { destroy_entry(entry); });
-    }
-
-    // Function to set time-to-live (TTL) for an entry
-    static void set_entry_ttl(Entry& entry, int64_t ttl_ms, BinaryHeap<uint64_t>& heap) {
-        if (ttl_ms <= 0) {  // ✅ Remove entry for both `ttl_ms == 0` and `ttl_ms == -1`
-            if (entry.heap_idx != static_cast<size_t>(-1)) {
-                remove_from_heap(entry, heap);
-            }
-            return;
-        }
-    
-        uint64_t expire_at = get_monotonic_usec() + static_cast<uint64_t>(ttl_ms) * 1000;
-    
-        if (entry.heap_idx == static_cast<size_t>(-1)) {
-            add_to_heap(entry, expire_at, heap);
-        } else {
-            update_heap(entry, expire_at, heap);  // ✅ Update TTL instead of re-inserting
-        }
-    }
-    
-    
-    
-    
-
 private:
-    // Function to remove an entry from the heap
-   // Function to remove an entry from the heap
-    static void remove_from_heap(Entry& entry, BinaryHeap<uint64_t>& heap) {
+    HMap<std::string, std::shared_ptr<EntryBase>> db_;  
+    BinaryHeap<uint64_t> heap_;                         
+    ThreadPool thread_pool_;                            
+    mutable std::mutex mutex_;                        
 
-        size_t pos = entry.heap_idx;
+public:
+    EntryManager(size_t thread_pool_size = 4)
+        : heap_(std::less<uint64_t>()), thread_pool_(thread_pool_size) {}
 
-        if (pos >= heap.size()) {
-            std::cerr << "remove_from_heap: Invalid heap index for entry: " << entry.key << std::endl;
+
+    std::shared_ptr<EntryBase> find_entry(const std::string& key) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto entry = db_.find(key); 
+        return entry ? *entry : nullptr;
+    }
+        
+    
+    template <typename T>
+    std::shared_ptr<Entry<T>> create_entry(std::string key, T value) {
+        static_assert(IsValidType<T>::value, "Invalid Redis type");
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto entry = std::make_shared<Entry<T>>(std::move(key), std::move(value));
+        db_.insert(entry->key, entry);
+        return entry;
+    }
+
+    void delete_entry(const std::string& key) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto entry = db_.find(key);
+        if (entry) {
+            if ((*entry)->heap_idx != static_cast<size_t>(-1)) {
+                remove_from_heap(**entry);
+            }
+            db_.remove(key); 
+        }
+    }
+    
+    void clear_all() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        db_.clear();  
+        heap_.clear();  
+    }
+
+    void set_entry_ttl(EntryBase& entry, int64_t ttl_ms) {
+        if (ttl_ms <= 0) {  
+            delete_entry(entry.key);
             return;
         }
 
-        // Swap with last element if not already last
-        if (pos != heap.size() - 1) {
-            std::swap(heap[pos], heap[heap.size() - 1]);
+        uint64_t expire_at = get_monotonic_usec() + static_cast<uint64_t>(ttl_ms) * 1000;
+
+        if (entry.heap_idx == static_cast<size_t>(-1)) {
+            add_to_heap(entry, expire_at);
+        } else {
+            update_heap(entry, expire_at);
+        }
+    }
+
+    int64_t get_expiry_time(EntryBase& entry) {
+        uint64_t now = get_monotonic_usec();
+        
+        if (entry.heap_idx == static_cast<size_t>(-1) || entry.heap_idx >= heap_.size()) {
+            return -1;  
         }
 
-        // Remove last element
-        heap.pop();
+        uint64_t expire_at = heap_[entry.heap_idx].value();
+        int64_t remaining_time = static_cast<int64_t>((expire_at - now) / 1000);  
 
-        // If swapped, restore heap order
-        if (pos < heap.size()) {
-            heap.update(pos);
-        }
+        return remaining_time > 0 ? remaining_time : -1; 
+    }
 
-        // Mark entry as removed from the heap
+    void remove_from_heap(EntryBase& entry) {
+        if (entry.heap_idx >= heap_.size()) return;
+        heap_.pop();
         entry.heap_idx = static_cast<size_t>(-1);
     }
 
-    // Function to add an entry to the heap with expiration time
-    // Function to add an entry to the heap
-    static void add_to_heap(Entry& entry, uint64_t expire_at, BinaryHeap<uint64_t>& heap) {
-        heap.push(HeapItem<uint64_t>(expire_at, &entry.heap_idx));
-        entry.heap_idx = heap.size() - 1; // Store heap index
-        heap.update(entry.heap_idx); // Restore heap order
+    void add_to_heap(EntryBase& entry, uint64_t expire_at) {
+        heap_.push(HeapItem<uint64_t>(expire_at, &entry.heap_idx));
+        entry.heap_idx = heap_.size() - 1;
+        heap_.update(entry.heap_idx);
     }
 
-    // Function to update an entry's expiration time in the heap
-   // Function to update an entry's expiration time in the heap
-   static void update_heap(Entry& entry, uint64_t new_expire_at, BinaryHeap<uint64_t>& heap){
-    if (entry.heap_idx >= heap.size()) {
-        std::cerr << "update_heap: Invalid heap index for entry: " << entry.key << std::endl;
-        return;
-    }
-    heap[entry.heap_idx].set_value(new_expire_at); 
-    heap.update(entry.heap_idx);  
+    void update_heap(EntryBase& entry, uint64_t new_expire_at) {
+        if (entry.heap_idx >= heap_.size()) return;
+        heap_[entry.heap_idx].set_value(new_expire_at);
+        heap_.update(entry.heap_idx);
     }
 
+    
 
+    void delete_entry_async(const std::string& key) {
+        thread_pool_.enqueue([this, key]() { 
+            delete_entry(key); 
+        });
+        thread_pool_.wait_for_tasks(); 
+    }
+    
+
+    // void print_db() const {
+    //     std::lock_guard<std::mutex> lock(mutex_);
+    //     for (const auto& [key, entry] : db_) {
+    //         entry->print();
+    //     }
+    // }
 };
 
 #endif // ENTRY_MANAGER_HPP

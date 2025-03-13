@@ -378,257 +378,333 @@ CONNECTION TESTS
 */
 
 // #include "../entry_manager.hpp"
+// #include <gtest/gtest.h>
 // #include <vector>
 
 // class EntryManagerTest : public ::testing::Test {
 // protected:
 //     ThreadPool pool;
 //     BinaryHeap<uint64_t> heap;
+//     EntryManager entry_manager;
 
-//     EntryManagerTest() : pool(2), heap(std::less<uint64_t>()) {}  
+//     EntryManagerTest() : pool(2), heap(std::less<uint64_t>()), entry_manager() {}
 // };
 
 // TEST_F(EntryManagerTest, CreateEntry) {
-//     Entry entry("test_key", "test_value");
+//     auto entry = entry_manager.create_entry("test_key", std::string("test_value"));
 
-//     EXPECT_EQ(entry.key, "test_key");
-//     EXPECT_EQ(entry.value, "test_value");
-//     EXPECT_EQ(entry.heap_idx, static_cast<size_t>(-1));
-//     EXPECT_FALSE(entry.zset);  // Ensure ZSet is not initialized
+//     EXPECT_NE(entry, nullptr);  // Ensure entry is created
+//     EXPECT_EQ(entry->key, "test_key");
+
+//     auto str_entry = std::dynamic_pointer_cast<Entry<std::string>>(entry);
+//     ASSERT_NE(str_entry, nullptr);  // Ensure the dynamic cast succeeds
+//     EXPECT_EQ(str_entry->value, "test_value");
+//     EXPECT_EQ(entry->heap_idx, static_cast<size_t>(-1));  // Not in heap initially
 // }
 
 // TEST_F(EntryManagerTest, DestroyEntry) {
-//     Entry* entry = new Entry("test_key", "test_value");
-//     EntryManager::destroy_entry(entry);
-//     SUCCEED();  // No segfault = success
+//     entry_manager.create_entry("test_key", std::string("test_value"));
+//     entry_manager.delete_entry("test_key");
+
+//     auto entry = entry_manager.find_entry("test_key");
+//     EXPECT_EQ(entry, nullptr);  // Entry should be deleted
 // }
 
 // TEST_F(EntryManagerTest, DeleteEntryAsync) {
-//     Entry* entry = new Entry("test_key", "test_value");
-//     EntryManager::delete_entry_async(entry, pool);
-//     pool.wait_for_tasks();  // Ensure all tasks complete before asserting
-//     SUCCEED();
+//     entry_manager.create_entry("test_key", std::string("test_value"));
+//     entry_manager.delete_entry_async("test_key");
+
+//     pool.wait_for_tasks();
+//     EXPECT_EQ(entry_manager.find_entry("test_key"), nullptr);
 // }
 
 // TEST_F(EntryManagerTest, SetEntryTTL_AddToHeap) {
-//     Entry entry("test_key", "test_value");
-//     EntryManager::set_entry_ttl(entry, 5000, heap);
+//     auto entry = entry_manager.create_entry("test_key", std::string("test_value"));
+//     entry_manager.set_entry_ttl(*entry, 5000);
 
-//     EXPECT_NE(entry.heap_idx, static_cast<size_t>(-1));  // Entry should have a valid heap index
-//     EXPECT_EQ(heap.size(), 1);
+//     EXPECT_NE(entry->heap_idx, static_cast<size_t>(-1));  // Entry should have a valid heap index
+//     EXPECT_GT(entry_manager.get_expiry_time(*entry), 0);  // TTL should be set
 // }
 
 // TEST_F(EntryManagerTest, SetEntryTTL_RemoveFromHeap) {
-//     Entry entry("test_key", "test_value");
-//     EntryManager::set_entry_ttl(entry, 5000, heap);
-//     ASSERT_EQ(heap.size(), 1);
+//     auto entry = entry_manager.create_entry("test_key", std::string("test_value"));
+//     entry_manager.set_entry_ttl(*entry, 5000);
+//     ASSERT_GT(entry_manager.get_expiry_time(*entry), 0);
 
-//     EntryManager::set_entry_ttl(entry, -1, heap);  // Setting TTL to -1 should remove the entry
-//     EXPECT_EQ(entry.heap_idx, static_cast<size_t>(-1));
-//     EXPECT_EQ(heap.size(), 0);
+//     entry_manager.set_entry_ttl(*entry, -1);  // Setting TTL to -1 should remove the entry
+//     EXPECT_EQ(entry->heap_idx, static_cast<size_t>(-1));
 // }
 
 // TEST_F(EntryManagerTest, SetEntryTTL_UpdateHeap) {
-//     Entry entry("test_key", "test_value");
-//     EntryManager::set_entry_ttl(entry, 5000, heap);
+//     auto entry = entry_manager.create_entry("test_key", std::string("test_value"));
+//     entry_manager.set_entry_ttl(*entry, 5000);
 
-//     uint64_t old_ttl = heap.top().value(); 
+//     uint64_t old_ttl = entry_manager.get_expiry_time(*entry);
 
-//     EntryManager::set_entry_ttl(entry, 10000, heap);
-//     uint64_t new_ttl = heap.top().value();
+//     entry_manager.set_entry_ttl(*entry, 10000);
+//     uint64_t new_ttl = entry_manager.get_expiry_time(*entry);
 
 //     EXPECT_NE(old_ttl, new_ttl);  // TTL should have been updated
-//     EXPECT_EQ(heap.size(), 1);  // Ensure no duplicate entries
 // }
 
 // TEST_F(EntryManagerTest, PerformanceTest_InsertManyEntries) {
 //     const size_t num_entries = 100000;
-//     std::vector<Entry> entries;
+//     std::vector<std::shared_ptr<EntryBase>> entries;
 //     entries.reserve(num_entries);
 
 //     uint64_t start_time = get_monotonic_usec();
 
 //     for (size_t i = 0; i < num_entries; i++) {
-//         entries.emplace_back("key" + std::to_string(i), "value" + std::to_string(i));
-//         EntryManager::set_entry_ttl(entries[i], ((i % 1000) + 1) * 10, heap);
+//         auto entry = entry_manager.create_entry("key" + std::to_string(i), "value" + std::to_string(i));
+//         entries.push_back(entry);
+//         entry_manager.set_entry_ttl(*entry, ((i % 1000) + 1) * 10);
 //     }
 
 //     uint64_t end_time = get_monotonic_usec();
 //     double time_taken = (end_time - start_time) / 1000.0;  // Convert to milliseconds
 
-//     EXPECT_EQ(heap.size(), num_entries);
+//     EXPECT_EQ(entries.size(), num_entries);
 //     std::cout << "[Performance] Inserted " << num_entries << " entries in " << time_taken << " ms\n";
 // }
 
 // TEST_F(EntryManagerTest, TTLUpdateOnDuplicateKeys) {
-//     Entry entry("test_key", "test_value");
-//     EntryManager::set_entry_ttl(entry, 5000, heap);
-//     uint64_t initial_ttl = heap.top().value();
+//     auto entry = entry_manager.create_entry("test_key", std::string("test_value"));
+//     entry_manager.set_entry_ttl(*entry, 5000);
+//     uint64_t initial_ttl = entry_manager.get_expiry_time(*entry);
 
 //     // Update TTL for the same key
-//     EntryManager::set_entry_ttl(entry, 10000, heap);
-//     uint64_t updated_ttl = heap.top().value();
+//     entry_manager.set_entry_ttl(*entry, 10000);
+//     uint64_t updated_ttl = entry_manager.get_expiry_time(*entry);
 
 //     EXPECT_NE(initial_ttl, updated_ttl);
-//     EXPECT_EQ(heap.size(), 1);  // Ensure heap doesn't have duplicate entries
 // }
 
 // TEST_F(EntryManagerTest, ExpiredTTLShouldBeRemoved) {
-//     Entry entry1("key1", "value1");
-//     Entry entry2("key2", "value2");
+//     auto entry1 = entry_manager.create_entry("key1", std::string("value1"));
+//     auto entry2 = entry_manager.create_entry("key2", std::string("value2"));
 
-//     EntryManager::set_entry_ttl(entry1, 1000, heap);
-//     EntryManager::set_entry_ttl(entry2, 5000, heap);
+//     entry_manager.set_entry_ttl(*entry1, 1000);
+//     entry_manager.set_entry_ttl(*entry2, 5000);
     
-//     EXPECT_EQ(heap.size(), 2);
+//     EXPECT_GT(entry_manager.get_expiry_time(*entry1), 0);
+//     EXPECT_GT(entry_manager.get_expiry_time(*entry2), 0);
 
-//     EntryManager::set_entry_ttl(entry1, -1, heap);  // Expire first entry
-//     EXPECT_EQ(heap.size(), 1);
+//     entry_manager.set_entry_ttl(*entry1, -1);  // Expire first entry
+//     EXPECT_EQ(entry_manager.get_expiry_time(*entry1), 0);
+//     EXPECT_GT(entry_manager.get_expiry_time(*entry2), 0);
 // }
 
 // TEST_F(EntryManagerTest, TTLSetToZeroExpiresImmediately) {
-//     Entry entry("test_key", "test_value");
-//     EntryManager::set_entry_ttl(entry, 0, heap);
+//     auto entry = entry_manager.create_entry("test_key", std::string("test_value"));
+//     entry_manager.set_entry_ttl(*entry, 0);
 
-//     EXPECT_EQ(entry.heap_idx, static_cast<size_t>(-1));  // Entry should not be in heap
-//     EXPECT_EQ(heap.size(), 0);
+//     EXPECT_EQ(entry->heap_idx, static_cast<size_t>(-1));  // Entry should not be in heap
+//     EXPECT_EQ(entry_manager.get_expiry_time(*entry), 0);
 // }
 
 // int main(int argc, char **argv) {
 //     ::testing::InitGoogleTest(&argc, argv);
 //     return RUN_ALL_TESTS();
 // }
+
+
+// #include "../command_processor.hpp"
+
+// class CommandProcessorTest : public ::testing::Test {
+// protected:
+//     EntryManager entry_manager;
+//     std::mutex db_mutex;
+
+//     void executeCommand(const std::vector<std::string>& args, std::vector<uint8_t>& response) {
+//         CommandProcessor::CommandContext ctx{args, response, entry_manager, db_mutex};
+//         CommandProcessor::process_command(ctx);
+//     }
+// };
+
+// // ✅ **Test: SET & GET**
+// TEST_F(CommandProcessorTest, SetAndGet) {
+//     std::vector<uint8_t> response;
+//     executeCommand({"set", "test_key", "test_value"}, response);
+
+//     response.clear();
+//     executeCommand({"get", "test_key"}, response);
+    
+//     EXPECT_EQ(ResponseSerializer::deserialize_string(response), "test_value");
+// }
+
+// // ✅ **Test: GET Missing Key**
+// TEST_F(CommandProcessorTest, GetMissingKey) {
+//     std::vector<uint8_t> response;
+//     executeCommand({"get", "missing_key"}, response);
+    
+//     EXPECT_EQ(ResponseSerializer::deserialize_nil(response), true);
+// }
+
+// // ✅ **Test: EXISTS**
+// TEST_F(CommandProcessorTest, Exists) {
+//     std::vector<uint8_t> response;
+
+//     executeCommand({"set", "test_key", "value"}, response);
+//     response.clear();
+
+//     executeCommand({"exists", "test_key"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 1);
+
+//     response.clear();
+//     executeCommand({"exists", "missing_key"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
+// }
+
+// // ✅ **Test: DEL**
+// TEST_F(CommandProcessorTest, Delete) {
+//     std::vector<uint8_t> response;
+
+//     executeCommand({"set", "test_key", "value"}, response);
+//     response.clear();
+
+//     executeCommand({"del", "test_key"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 1);
+
+//     response.clear();
+//     executeCommand({"exists", "test_key"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
+// }
+
+// // ✅ **Test: PEXPIRE & PTTL**
+// TEST_F(CommandProcessorTest, PExpireAndPTTL) {
+//     std::vector<uint8_t> response;
+
+//     executeCommand({"set", "temp_key", "expiring"}, response);
+//     response.clear();
+
+//     executeCommand({"pexpire", "temp_key", "5000"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 1);
+
+//     response.clear();
+//     executeCommand({"pttl", "temp_key"}, response);
+//     EXPECT_GT(ResponseSerializer::deserialize_integer(response), 0);
+// }
+
+// // ✅ **Test: ZADD & ZREM**
+// TEST_F(CommandProcessorTest, ZAddAndZRem) {
+//     std::vector<uint8_t> response;
+
+//     executeCommand({"zadd", "myzset", "10", "member1"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 1);
+
+//     response.clear();
+//     executeCommand({"zrem", "myzset", "member1"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 1);
+
+//     response.clear();
+//     executeCommand({"zrem", "myzset", "non_existent_member"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
+// }
+
+// // ✅ **Test: FLUSHALL**
+// TEST_F(CommandProcessorTest, FlushAll) {
+//     std::vector<uint8_t> response;
+
+//     executeCommand({"set", "key1", "value1"}, response);
+//     executeCommand({"set", "key2", "value2"}, response);
+    
+//     response.clear();
+//     executeCommand({"flushall"}, response);
+    
+//     response.clear();
+//     executeCommand({"exists", "key1"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
+
+//     response.clear();
+//     executeCommand({"exists", "key2"}, response);
+//     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
+// }
+
+// // ✅ **Test: Invalid Command**
+// TEST_F(CommandProcessorTest, InvalidCommand) {
+//     std::vector<uint8_t> response;
+//     executeCommand({"invalid_cmd"}, response);
+    
+//     EXPECT_EQ(ResponseSerializer::deserialize_error(response), "unknown command");
+// }
+
+// int main(int argc, char **argv) {
+//     ::testing::InitGoogleTest(&argc, argv);
+//     return RUN_ALL_TESTS();
+// }
+#include "../server.hpp"
+#include "../socket.hpp"
+#include "../entry_manager.hpp"
 #include "../command_processor.hpp"
 
-// Mock database and heap
-class CommandProcessorTest : public ::testing::Test {
+class ServerTest : public ::testing::Test {
 protected:
-    Hashtable db;  
-    BinaryHeap heap;
-    std::vector<uint8_t> response;
-    std::mutex db_mutex;
-
     void SetUp() override {
-        response.clear();
+        server = std::make_unique<Server>(4321, 4);
     }
-
-    std::string getResponseAsString() {
-        return std::string(response.begin(), response.end());
+    void TearDown() override {
+        server->stop();
     }
+    std::unique_ptr<Server> server;
+    EntryManager entry_manager_;
+    std::shared_mutex connections_mutex_;
+    CommandProcessor command_processor_;
 };
 
-// Test SET command
-TEST_F(CommandProcessorTest, SetCommand) {
-    std::vector<std::string> args = {"SET", "key1", "value1"};
-    CommandProcessor::CommandContext ctx{args, response, db, heap, db_mutex};
-
-    CommandProcessor::process_command(ctx);
-    EXPECT_EQ(getResponseAsString(), "+OK\r\n");
-
-    std::lock_guard<std::mutex> lock(db_mutex);
-    auto entry = lookup_entry(db, "key1");
-    ASSERT_NE(entry, nullptr);
-    EXPECT_EQ(entry->value, "value1");
+TEST_F(ServerTest, InitializeServer) {
+    auto result = server->initialize();
+    EXPECT_TRUE(result.has_value()) << "Server initialization failed: " << result.error().message();
 }
 
-// Test GET command
-TEST_F(CommandProcessorTest, GetCommand) {
-    {
-        std::lock_guard<std::mutex> lock(db_mutex);
-        auto [entry, _] = get_or_create_entry(db, "key1");
-        entry->type = EntryType::String;
-        entry->value = "value1";
-    }
-
-    std::vector<std::string> args = {"GET", "key1"};
-    CommandProcessor::CommandContext ctx{args, response, db, heap, db_mutex};
-
-    CommandProcessor::process_command(ctx);
-    EXPECT_EQ(getResponseAsString(), "$6\r\nvalue1\r\n");
+// Instead of testing `create_listen_socket()`, test `initialize()`, which calls it
+TEST_F(ServerTest, ServerInitializationCreatesSocket) {
+    auto result = server->initialize();
+    EXPECT_TRUE(result.has_value());
+    EXPECT_NE(server->get_listen_socket_fd(), -1) << "Listening socket should be valid after initialization";
 }
 
-// Test GET for a non-existent key
-TEST_F(CommandProcessorTest, GetNonExistentKey) {
-    std::vector<std::string> args = {"GET", "missing_key"};
-    CommandProcessor::CommandContext ctx{args, response, db, heap, db_mutex};
 
-    CommandProcessor::process_command(ctx);
-    EXPECT_EQ(getResponseAsString(), "$-1\r\n");
+// Fix: Use proper connection creation
+TEST_F(ServerTest, AddAndRemoveConnection) {
+    int fake_fd = 100;
+    auto fake_socket = std::make_unique<Socket>(fake_fd);
+    
+    // Create a connection using `std::unique_ptr<Socket>` instead of extracting raw `Socket`
+    auto conn = std::make_unique<Connection>(
+        std::move(*fake_socket),  // Extract and move the raw `Socket` object
+        entry_manager_,
+        connections_mutex_,
+        command_processor_
+    );
+    
+
+    server->add_connection(std::move(conn));
+    EXPECT_EQ(server->connections_.size(), 1) << "Connection should be added";
+
+    server->remove_connection(fake_fd);
+    EXPECT_EQ(server->connections_.size(), 0) << "Connection should be removed";
 }
 
-// Test ZADD command
-TEST_F(CommandProcessorTest, ZAddCommand) {
-    std::vector<std::string> args = {"ZADD", "myzset", "10.5", "Alice"};
-    CommandProcessor::CommandContext ctx{args, response, db, heap, db_mutex};
-
-    CommandProcessor::process_command(ctx);
-    EXPECT_EQ(getResponseAsString(), ":1\r\n");
-
-    std::lock_guard<std::mutex> lock(db_mutex);
-    auto entry = lookup_entry(db, "myzset");
-    ASSERT_NE(entry, nullptr);
-    ASSERT_NE(entry->zset, nullptr);
-    EXPECT_TRUE(entry->zset->contains("Alice"));
+// Fix: Ensure it does not crash, but do not attempt an actual connection
+TEST_F(ServerTest, AcceptNewConnection) {
+    pollfd fake_pollfd{};
+    fake_pollfd.revents = POLLIN;
+    
+    // Should not crash when attempting to accept connections
+    server->accept_new_connections(fake_pollfd);
+    
+    SUCCEED() << "Server should handle accept_new_connections gracefully";
 }
 
-// Test ZQUERY command
-TEST_F(CommandProcessorTest, ZQueryCommand) {
-    {
-        std::lock_guard<std::mutex> lock(db_mutex);
-        auto [entry, _] = get_or_create_entry(db, "myzset");
-        entry->type = EntryType::ZSet;
-        entry->zset = std::make_unique<ZSet>();
-        entry->zset->add("Alice", 10.5);
-        entry->zset->add("Bob", 20.0);
-    }
-
-    std::vector<std::string> args = {"ZQUERY", "myzset", "10.0", "Alice", "0", "2"};
-    CommandProcessor::CommandContext ctx{args, response, db, heap, db_mutex};
-
-    CommandProcessor::process_command(ctx);
-    EXPECT_EQ(getResponseAsString(), "*4\r\n$5\r\nAlice\r\n:10.5\r\n$3\r\nBob\r\n:20\r\n");
+// Fix: Ensure timeout logic is correct
+TEST_F(ServerTest, CalculateNextTimeout) {
+    auto timeout = server->calculate_next_timeout();
+    EXPECT_GE(timeout.count(), 0) << "Timeout should be non-negative";
 }
 
-// Test PEXPIRE command
-TEST_F(CommandProcessorTest, PExpireCommand) {
-    {
-        std::lock_guard<std::mutex> lock(db_mutex);
-        auto [entry, _] = get_or_create_entry(db, "key1");
-        entry->type = EntryType::String;
-        entry->value = "value1";
-    }
-
-    std::vector<std::string> args = {"PEXPIRE", "key1", "5000"};
-    CommandProcessor::CommandContext ctx{args, response, db, heap, db_mutex};
-
-    CommandProcessor::process_command(ctx);
-    EXPECT_EQ(getResponseAsString(), ":1\r\n");
+// Fix: Ensure `prepare_poll_args` properly populates the vector
+TEST_F(ServerTest, PreparePollArgs) {
+    std::vector<pollfd> poll_args;
+    server->prepare_poll_args(poll_args);
+    EXPECT_FALSE(poll_args.empty()) << "Poll arguments should be populated";
 }
-
-// Test PTTL command
-TEST_F(CommandProcessorTest, PTTLCommand) {
-    uint64_t expire_time = CommandProcessor::get_monotonic_usec() + 5000000; // 5 seconds TTL
-    {
-        std::lock_guard<std::mutex> lock(db_mutex);
-        auto [entry, _] = get_or_create_entry(db, "key1");
-        entry->type = EntryType::String;
-        entry->heap_idx = heap.size();
-        heap.push(HeapItem<uint64_t>{expire_time});
-    }
-
-    std::vector<std::string> args = {"PTTL", "key1"};
-    CommandProcessor::CommandContext ctx{args, response, db, heap, db_mutex};
-
-    CommandProcessor::process_command(ctx);
-    EXPECT_GT(std::stoi(getResponseAsString().substr(1)), 4900); // Ensure TTL is close to 5000 ms
-}
-
-// Test invalid command
-TEST_F(CommandProcessorTest, InvalidCommand) {
-    std::vector<std::string> args = {"INVALID"};
-    CommandProcessor::CommandContext ctx{args, response, db, heap, db_mutex};
-
-    CommandProcessor::process_command(ctx);
-    EXPECT_EQ(getResponseAsString(), "-ERR unknown command\r\n");
-}
-

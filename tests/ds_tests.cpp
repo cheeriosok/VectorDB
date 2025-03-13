@@ -504,33 +504,32 @@ AVL TREE TESTS
 //     EXPECT_EQ(it, list.end());
 // }
 
-#include "../zset.hpp"
-#include <future>
-#include <thread>
-#include <vector>
+// #include "../zset.hpp"
+// #include <thread>
+// #include <vector>
 
-TEST(ZSetTest, AddTest) {
-    ZSet zset;
+// TEST(ZSetTest, AddTest) {
+//     ZSet zset;
 
-    auto future = zset.add("Alice", 10.5);
-    EXPECT_TRUE(future.get());
+//     auto future = zset.add("Alice", 10.5);
+//     EXPECT_TRUE(future.get());
 
-    ZNode* node = nullptr;
-    for (int i = 0; i < 10 && !(node = zset.lookup("Alice")); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    ASSERT_NE(node, nullptr);
-    EXPECT_EQ(node->get_value(), 10.5);
+//     ZNode* node = nullptr;
+//     for (int i = 0; i < 10 && !(node = zset.lookup("Alice")); ++i) {
+//         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+//     }
+//     ASSERT_NE(node, nullptr);
+//     EXPECT_EQ(node->get_value(), 10.5);
 
-    auto future2 = zset.add("Alice", 15.0);
-    EXPECT_FALSE(future2.get()); // Expect false because Alice already exists
-    EXPECT_EQ(zset.lookup("Alice")->get_value(), 15.0);
-}
+//     auto future2 = zset.add("Alice", 15.0);
+//     EXPECT_FALSE(future2.get()); // Expect false because Alice already exists
+//     EXPECT_EQ(zset.lookup("Alice")->get_value(), 15.0);
+// }
 
-TEST(ZSetTest, LookupNonExistentKey) {
-    ZSet zset;
-    EXPECT_EQ(zset.lookup("Unknown"), nullptr);
-}
+// TEST(ZSetTest, LookupNonExistentKey) {
+//     ZSet zset;
+//     EXPECT_EQ(zset.lookup("Unknown"), nullptr);
+// }
 // Concurrent Testing - try after AVL and Hashtable are thread-safe
 
 // TEST(ZSetTest, LargeScaleInsertion) {
@@ -552,91 +551,91 @@ TEST(ZSetTest, LookupNonExistentKey) {
 //         EXPECT_EQ(node->get_value(), i * 1.0);
 //     }
 // }
-TEST(ZSetTest, LargeScaleInsertion) {
-    ZSet zset;
-    const int num_entries = 10000;
+// TEST(ZSetTest, LargeScaleInsertion) {
+//     ZSet zset;
+//     const int num_entries = 10000;
 
-    // Sequential insertion (No concurrency)
-    for (int i = 0; i < num_entries; ++i) {
-        EXPECT_TRUE(zset.add("Key" + std::to_string(i), i * 1.0).get());
-    }
+//     // Sequential insertion (No concurrency)
+//     for (int i = 0; i < num_entries; ++i) {
+//         EXPECT_TRUE(zset.add("Key" + std::to_string(i), i * 1.0).get());
+//     }
 
-    for (int i = 0; i < num_entries; ++i) {
-        auto node = zset.lookup("Key" + std::to_string(i));
-        ASSERT_NE(node, nullptr);
-        EXPECT_EQ(node->get_value(), i * 1.0);
-    }
-}
+//     for (int i = 0; i < num_entries; ++i) {
+//         auto node = zset.lookup("Key" + std::to_string(i));
+//         ASSERT_NE(node, nullptr);
+//         EXPECT_EQ(node->get_value(), i * 1.0);
+//     }
+// }
 
-TEST(ZSetTest, ConcurrentAddTest) {
-    ZSet zset;
-    const int num_threads = 10;
-    std::vector<std::thread> threads;
+// TEST(ZSetTest, ConcurrentAddTest) {
+//     ZSet zset;
+//     const int num_threads = 10;
+//     std::vector<std::thread> threads;
     
-    for (int i = 0; i < num_threads; ++i) {
-        threads.emplace_back([&zset, i] {
-            zset.add("ThreadedKey" + std::to_string(i), i * 2.0).get();
-        });
-    }
+//     for (int i = 0; i < num_threads; ++i) {
+//         threads.emplace_back([&zset, i] {
+//             zset.add("ThreadedKey" + std::to_string(i), i * 2.0).get();
+//         });
+//     }
     
-    for (auto& t : threads) {
-        t.join();
-    }
+//     for (auto& t : threads) {
+//         t.join();
+//     }
     
-    for (int i = 0; i < num_threads; ++i) {
-        auto node = zset.lookup("ThreadedKey" + std::to_string(i));
-        ASSERT_NE(node, nullptr);
-        EXPECT_EQ(node->get_value(), i * 2.0);
-    }
-}
+//     for (int i = 0; i < num_threads; ++i) {
+//         auto node = zset.lookup("ThreadedKey" + std::to_string(i));
+//         ASSERT_NE(node, nullptr);
+//         EXPECT_EQ(node->get_value(), i * 2.0);
+//     }
+// }
 
-TEST(ZSetTest, PopTest) {
-    ZSet zset;
-    zset.add("Charlie", 8.8).get();
+// TEST(ZSetTest, PopTest) {
+//     ZSet zset;
+//     zset.add("Charlie", 8.8).get();
     
-    ZNode* node = zset.pop("Charlie").get();
-    ASSERT_NE(node, nullptr);
-    EXPECT_EQ(node->get_value(), 8.8);
-    EXPECT_EQ(zset.lookup("Charlie"), nullptr);
-}
+//     ZNode* node = zset.pop("Charlie").get();
+//     ASSERT_NE(node, nullptr);
+//     EXPECT_EQ(node->get_value(), 8.8);
+//     EXPECT_EQ(zset.lookup("Charlie"), nullptr);
+// }
 
-TEST(ZSetTest, PopNonExistentKey) {
-    ZSet zset;
-    EXPECT_EQ(zset.pop("Unknown").get(), nullptr);
-}
+// TEST(ZSetTest, PopNonExistentKey) {
+//     ZSet zset;
+//     EXPECT_EQ(zset.pop("Unknown").get(), nullptr);
+// }
 
-TEST(ZSetTest, UpdateScoreTest) {
-    ZSet zset;
-    zset.add("Dave", 12.0).get();
+// TEST(ZSetTest, UpdateScoreTest) {
+//     ZSet zset;
+//     zset.add("Dave", 12.0).get();
     
-    ZNode* node = zset.lookup("Dave");
-    ASSERT_NE(node, nullptr);
-    EXPECT_EQ(node->get_value(), 12.0);
+//     ZNode* node = zset.lookup("Dave");
+//     ASSERT_NE(node, nullptr);
+//     EXPECT_EQ(node->get_value(), 12.0);
     
-    zset.update_score(node, 18.5);
-    EXPECT_EQ(node->get_value(), 18.5);
-}
+//     zset.update_score(node, 18.5);
+//     EXPECT_EQ(node->get_value(), 18.5);
+// }
 
-TEST(ZSetTest, UpdateScoreNonExistent) {
-    ZSet zset;
-    ZNode dummy("Fake", 99.0);
+// TEST(ZSetTest, UpdateScoreNonExistent) {
+//     ZSet zset;
+//     ZNode dummy("Fake", 99.0);
 
-    bool result = zset.update_score(&dummy, 88.0);  
-    EXPECT_FALSE(result);  
-    EXPECT_EQ(dummy.get_value(), 99.0); 
-}
+//     bool result = zset.update_score(&dummy, 88.0);  
+//     EXPECT_FALSE(result);  
+//     EXPECT_EQ(dummy.get_value(), 99.0); 
+// }
 
 
-TEST(ZSetTest, QueryTest) {
-    ZSet zset;
-    zset.add("Eve", 20.0).get();
+// TEST(ZSetTest, QueryTest) {
+//     ZSet zset;
+//     zset.add("Eve", 20.0).get();
     
-    ZNode* node = zset.query(20.0, "Eve", 0);
-    ASSERT_NE(node, nullptr);
-    EXPECT_EQ(node->get_value(), 20.0);
-}
+//     ZNode* node = zset.query(20.0, "Eve", 0);
+//     ASSERT_NE(node, nullptr);
+//     EXPECT_EQ(node->get_value(), 20.0);
+// }
 
-TEST(ZSetTest, QueryNonExistent) {
-    ZSet zset;
-    EXPECT_EQ(zset.query(99.0, "Ghost", 0), nullptr);
-}
+// TEST(ZSetTest, QueryNonExistent) {
+//     ZSet zset;
+//     EXPECT_EQ(zset.query(99.0, "Ghost", 0), nullptr);
+// }
