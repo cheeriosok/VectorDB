@@ -88,21 +88,17 @@ echo "GET key1" | nc localhost 1234
 ---
 
 ## **Performance Optimization**
-- **Zero-copy string parsing with `std::span`**
-- **Minimized system calls with batch processing**
-- **Lock-free worker queue in thread pool**
-- **Cache-friendly data structures**
-- **Efficient memory management using RAII**
-
----
-
-## **Coming Soon**
 - **Unit and Integration Testing**
 - **Memory Pooling and Lock-Free Data Structures**
 - **Zero/Copy Send/Recv**
 - **Thread Affinity & NUMA Awareness**
 - **Viewstamped Replication**
 - **Multi-Tiered Caching w/ w-TinyLFU**
+- **Zero-copy string parsing with `std::span`**
+- **Minimized system calls with batch processing**
+- **Lock-free worker queue in thread pool**
+- **Cache-friendly data structures**
+- **Efficient memory management using RAII**
 
 ---
 
