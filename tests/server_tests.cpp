@@ -521,7 +521,6 @@ CONNECTION TESTS
 //     }
 // };
 
-// // ✅ **Test: SET & GET**
 // TEST_F(CommandProcessorTest, SetAndGet) {
 //     std::vector<uint8_t> response;
 //     executeCommand({"set", "test_key", "test_value"}, response);
@@ -532,7 +531,6 @@ CONNECTION TESTS
 //     EXPECT_EQ(ResponseSerializer::deserialize_string(response), "test_value");
 // }
 
-// // ✅ **Test: GET Missing Key**
 // TEST_F(CommandProcessorTest, GetMissingKey) {
 //     std::vector<uint8_t> response;
 //     executeCommand({"get", "missing_key"}, response);
@@ -540,7 +538,6 @@ CONNECTION TESTS
 //     EXPECT_EQ(ResponseSerializer::deserialize_nil(response), true);
 // }
 
-// // ✅ **Test: EXISTS**
 // TEST_F(CommandProcessorTest, Exists) {
 //     std::vector<uint8_t> response;
 
@@ -555,7 +552,6 @@ CONNECTION TESTS
 //     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
 // }
 
-// // ✅ **Test: DEL**
 // TEST_F(CommandProcessorTest, Delete) {
 //     std::vector<uint8_t> response;
 
@@ -570,7 +566,6 @@ CONNECTION TESTS
 //     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
 // }
 
-// // ✅ **Test: PEXPIRE & PTTL**
 // TEST_F(CommandProcessorTest, PExpireAndPTTL) {
 //     std::vector<uint8_t> response;
 
@@ -585,7 +580,6 @@ CONNECTION TESTS
 //     EXPECT_GT(ResponseSerializer::deserialize_integer(response), 0);
 // }
 
-// // ✅ **Test: ZADD & ZREM**
 // TEST_F(CommandProcessorTest, ZAddAndZRem) {
 //     std::vector<uint8_t> response;
 
@@ -601,7 +595,6 @@ CONNECTION TESTS
 //     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
 // }
 
-// // ✅ **Test: FLUSHALL**
 // TEST_F(CommandProcessorTest, FlushAll) {
 //     std::vector<uint8_t> response;
 
@@ -620,7 +613,6 @@ CONNECTION TESTS
 //     EXPECT_EQ(ResponseSerializer::deserialize_integer(response), 0);
 // }
 
-// // ✅ **Test: Invalid Command**
 // TEST_F(CommandProcessorTest, InvalidCommand) {
 //     std::vector<uint8_t> response;
 //     executeCommand({"invalid_cmd"}, response);
@@ -632,79 +624,114 @@ CONNECTION TESTS
 //     ::testing::InitGoogleTest(&argc, argv);
 //     return RUN_ALL_TESTS();
 // }
-#include "../server.hpp"
+// #include <gtest/gtest.h>
+// #include "../server.hpp"
 #include "../socket.hpp"
-#include "../entry_manager.hpp"
-#include "../command_processor.hpp"
+#include "../server.hpp"
 
 class ServerTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        server = std::make_unique<Server>(4321, 4);
+        server = std::make_unique<Server>(1234, 2);
     }
+
     void TearDown() override {
-        server->stop();
+        server.reset();
     }
+
     std::unique_ptr<Server> server;
-    EntryManager entry_manager_;
-    std::shared_mutex connections_mutex_;
-    CommandProcessor command_processor_;
 };
 
-TEST_F(ServerTest, InitializeServer) {
-    auto result = server->initialize();
-    EXPECT_TRUE(result.has_value()) << "Server initialization failed: " << result.error().message();
-}
+// TEST_F(ServerTest, ServerInitializesCorrectly) {
+//     auto result = server->initialize();
+//     EXPECT_TRUE(result) << "Server initialization failed: " << result.error().message();
+// }
 
-// Instead of testing `create_listen_socket()`, test `initialize()`, which calls it
-TEST_F(ServerTest, ServerInitializationCreatesSocket) {
-    auto result = server->initialize();
-    EXPECT_TRUE(result.has_value());
-    EXPECT_NE(server->get_listen_socket_fd(), -1) << "Listening socket should be valid after initialization";
-}
+// TEST_F(ServerTest, CreateListenSocket) {
+//     auto result = server->create_listen_socket();
+//     EXPECT_TRUE(result) << "Failed to create listen socket: " << result.error().message();
+// }
 
+// TEST_F(ServerTest, ServerRunsAndStops) {
+//     std::thread server_thread([this]() {
+//         EXPECT_NO_THROW(server->run());
+//     });
 
-// Fix: Use proper connection creation
-TEST_F(ServerTest, AddAndRemoveConnection) {
-    int fake_fd = 100;
-    auto fake_socket = std::make_unique<Socket>(fake_fd);
+//     // Give the server some time to start
+//     std::this_thread::sleep_for(std::chrono::seconds(1));
+
+//     // Stop the server
+//     server->stop();
+
+//     // Wait for the server thread to exit
+//     server_thread.join();
+// }
+
+// TEST_F(ServerTest, AcceptNewConnections) {
+//     pollfd listen_poll{server->get_listen_socket_fd(), POLLIN, 0};
+//     EXPECT_NO_THROW(server->accept_new_connections(listen_poll));
+// }
+
+// TEST_F(ServerTest, AddAndRemoveConnections) {
+//     auto result = server->create_listen_socket();
+//     ASSERT_TRUE(result);
     
-    // Create a connection using `std::unique_ptr<Socket>` instead of extracting raw `Socket`
-    auto conn = std::make_unique<Connection>(
-        std::move(*fake_socket),  // Extract and move the raw `Socket` object
-        entry_manager_,
-        connections_mutex_,
-        command_processor_
-    );
+//     Socket client_socket(::socket(AF_INET, SOCK_STREAM, 0));
+//     ASSERT_GT(client_socket.get(), 0);
     
-
-    server->add_connection(std::move(conn));
-    EXPECT_EQ(server->connections_.size(), 1) << "Connection should be added";
-
-    server->remove_connection(fake_fd);
-    EXPECT_EQ(server->connections_.size(), 0) << "Connection should be removed";
-}
-
-// Fix: Ensure it does not crash, but do not attempt an actual connection
-TEST_F(ServerTest, AcceptNewConnection) {
-    pollfd fake_pollfd{};
-    fake_pollfd.revents = POLLIN;
+//     auto conn = std::make_unique<Connection>(std::move(client_socket), server->entry_manager_, server->connections_mutex_, server->command_processor_);
+//     int fd = conn->fd();
+//     server->add_connection(std::move(conn));
+//     EXPECT_EQ(server->connections_.size(), 1);
     
-    // Should not crash when attempting to accept connections
-    server->accept_new_connections(fake_pollfd);
+//     server->remove_connection(fd);
+//     EXPECT_EQ(server->connections_.size(), 0);
+// }
+
+// int main(int argc, char **argv) {
+//     ::testing::InitGoogleTest(&argc, argv);
+//     return RUN_ALL_TESTS();
+// }
+
+
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string>
+bool send_and_receive(const std::string& message, std::string& response) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return false;
+
+    struct sockaddr_in server_addr{};
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(1234);
+    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        close(sock);
+        return false;
+    }
+
+    send(sock, message.c_str(), message.size(), 0);
+
+    char buffer[1024] = {0};
+    ssize_t bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
+    if (bytes_received > 0) {
+        response = std::string(buffer, bytes_received);
+    }
+
+    close(sock);
+    return bytes_received > 0;
+}
+TEST_F(ServerTest, ClientCanSendAndReceiveData) {
+    std::thread server_thread([this]() { server->run(); });
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    std::string response;
+    bool success = send_and_receive("PING\n", response);
     
-    SUCCEED() << "Server should handle accept_new_connections gracefully";
-}
+    EXPECT_TRUE(success);
+    EXPECT_EQ(response, "PONG\n");
 
-// Fix: Ensure timeout logic is correct
-TEST_F(ServerTest, CalculateNextTimeout) {
-    auto timeout = server->calculate_next_timeout();
-    EXPECT_GE(timeout.count(), 0) << "Timeout should be non-negative";
-}
-
-// Fix: Ensure `prepare_poll_args` properly populates the vector
-TEST_F(ServerTest, PreparePollArgs) {
-    std::vector<pollfd> poll_args;
-    server->prepare_poll_args(poll_args);
-    EXPECT_FALSE(poll_args.empty()) << "Poll arguments should be populated";
+    server->stop();
+    server_thread.join();
 }

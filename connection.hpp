@@ -12,7 +12,6 @@
 #include <unistd.h>       
 #include <cerrno>         
 #include <mutex>          
-
 #include "socket.hpp"               
 #include "request_parser.hpp"       
 #include "response_serializer.hpp"  
@@ -35,10 +34,9 @@ using Result = std::expected<T, std::error_code>;
 
 class Connection {
     public:
-        Connection(Socket socket, EntryManager& entry_manager, std::shared_mutex& db_mutex, CommandProcessor& processor)
+        Connection(Socket socket, EntryManager& entry_manager, CommandProcessor& processor)
             : socket_(std::move(socket)), 
               entry_manager_(entry_manager), 
-              db_mutex_(db_mutex),  x
               command_processor_(processor),
               state_(ConnectionState::Request),
               idle_start_(std::chrono::steady_clock::now()) {
@@ -57,7 +55,6 @@ class Connection {
 private:
     Socket socket_;  
     EntryManager& entry_manager_;  
-    std::shared_mutex& db_mutex_;  
     CommandProcessor& command_processor_;  
     ConnectionState state_; 
     std::chrono::steady_clock::time_point idle_start_;  
@@ -72,20 +69,47 @@ private:
     Result<bool> try_process_request();
 };
 
-inline Result<void> Connection::process_io() {
-    update_idle_time();
+Result<void> Connection::process_io() {
+    char buffer[1024] = {0};
+    ssize_t bytes_read = read(socket_.get(), buffer, sizeof(buffer) - 1);
 
-    switch (state_) {
-        case ConnectionState::Request:
-            return handle_request(); 
-        case ConnectionState::Response:
-            return handle_response(); 
-        case ConnectionState::End:
-            return std::unexpected(std::make_error_code(std::errc::connection_aborted));
-        default:
-            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    if (bytes_read > 0) {
+        buffer[bytes_read] = '\0';  
+        std::string request(buffer);
+        std::cout << "✅ Received command: " << request << std::endl;
+
+        std::vector<std::string> args;
+        std::istringstream iss(request);
+        std::string word;
+        while (iss >> word) {
+            args.push_back(word);
+        }
+
+        std::vector<uint8_t> response;
+        CommandProcessor::CommandContext ctx{args, response, entry_manager_};  
+        command_processor_.process_command(ctx);
+
+        std::string response_str(response.begin(), response.end());
+        ssize_t bytes_sent = write(socket_.get(), response_str.c_str(), response.size());
+
+        if (bytes_sent < 0) {
+            std::cerr << "❌ Write failed: " << strerror(errno) << std::endl;
+        } else {
+            std::cout << "✅ Sent response: " << response_str << std::endl;
+        }
+
+        return {};
+    } else if (bytes_read == 0) {
+        std::cerr << "Client disconnected.\n";
+        return std::unexpected(std::make_error_code(std::errc::connection_reset));
+    } else {
+        std::cerr << "❌ Read error: " << strerror(errno) << std::endl;
+        return std::unexpected(std::make_error_code(std::errc::io_error));
     }
 }
+
+
+
 
 inline Result<void> Connection::handle_request() {
     while (true) {
@@ -156,7 +180,7 @@ inline Result<bool> Connection::try_process_request() {
     
     std::vector<uint8_t> response;
     CommandProcessor::CommandContext ctx{
-        cmd, response, entry_manager_, db_mutex_
+        cmd, response, entry_manager_
     };
     
     command_processor_.process_command(ctx);

@@ -111,48 +111,44 @@ private:
             *items_[pos].position_ref_ = pos; // also assign new position reference (if tracking externally)***
         } 
     }
-    void sift_down(std::size_t pos) { // Function to restore heap order by moving an element down.
+    //similar to above dude
+    void sift_down(std::size_t pos) { 
 
-        HeapItem<T> temp = std::move(items_[pos]); // Store the current node in a temporary variable (removing it from its position).
-        const std::size_t len = items_.size(); // Get the total number of elements in the heap.
+        HeapItem<T> temp = std::move(items_[pos]); 
+        const std::size_t len = items_.size(); 
     
         while (true) { // Start an infinite loop to traverse down the heap.
             std::size_t min_pos = pos; // Assume the current position is correct.
             std::size_t left = left_child(pos); // Compute the left child index using heap property: left = 2 * i + 1.
             std::size_t right = right_child(pos); // Compute the right child index: right = 2 * i + 2.
     
-            // Check if left child is within bounds and whether it should replace the current position.
             if (left < len && compare_(items_[left].value_, temp.value_)) { 
-                min_pos = left; // Assign left child as the new minimum if it satisfies the heap condition.
+                min_pos = left; 
             }
     
-            // Check if right child is within bounds and whether it should replace the current position.
             if (right < len && compare_(items_[right].value_,  
                 (min_pos == pos ? temp.value_ : items_[min_pos].value_))) { 
-                min_pos = right; // Assign right child as the new minimum if it satisfies the heap condition.
+                min_pos = right;
             }
     
-            // If the current position is already the smallest (or largest for max-heap), we're done.
             if (min_pos == pos) {
                 break; 
             }
     
-            // Move the selected child up to the current position.
             items_[pos] = std::move(items_[min_pos]);
             
-            // Update the position reference if it exists (useful if external tracking of positions is required).
             if (items_[pos].position_ref_) {
                 *items_[pos].position_ref_ = pos;
             }
     
-            // Move down to the new position for the next iteration.
+            // move down to the new position for the next iteration.
             pos = min_pos;
         }
     
-        // Place the original element in its final position.
+        // place the original element in its final position.
         items_[pos] = std::move(temp);
     
-        // Update the position reference for the final placement if necessary.
+        // Uudate the position reference for the final placement if necessary.
         if (items_[pos].position_ref_) {
             *items_[pos].position_ref_ = pos;
         }

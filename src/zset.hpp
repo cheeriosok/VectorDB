@@ -14,7 +14,6 @@ public:
     AVLTree<std::string, double> tree; // avl tree to maintain ordered scores
     HMap<std::string, ZNode*> hash; // Assuming HMap<K, V> uses string keys
     ThreadPool thread_pool_; // thread pool for handling asynchronous tasks
-    mutable std::mutex mutex_;
     std::vector<std::shared_ptr<ZNode>> nodes_; // Keeps ZNode alive
 
     explicit ZSet(size_t threads = 4) : thread_pool_(threads) {} // initialize thread pool with a default of 4 worker threads
@@ -38,7 +37,6 @@ public:
     }
     
     bool add_internal(std::string_view name, double score) {
-        std::lock_guard<std::mutex> lock(mutex_);
     
         if (ZNode* node = lookup(name)) {
             update_score(node, score);
@@ -55,8 +53,8 @@ public:
     
         std::cerr << "Created node: " << node->get_key() << " with score: " << node->get_value() << std::endl;
     
-        nodes_.emplace_back(node); // 🔥 Store shared_ptr to maintain ownership
-        hash.insert(node->get_key(), node.get()); // 🔥 Store raw pointer in hash table
+        nodes_.emplace_back(node);  
+        hash.insert(node->get_key(), node.get()); 
         tree.set(node->get_key(), score);
     
         std::cerr << "Added node successfully: " << node->get_key() << std::endl;
@@ -72,13 +70,12 @@ public:
     // }
 
     ZNode* pop_internal(std::string_view name) {
-        std::lock_guard<std::mutex> lock(mutex_);
         ZNode** node_ptr = hash.find(std::string(name)); 
-        if (!node_ptr || !*node_ptr) return nullptr; // 🔥 Ensure valid pointer
+        if (!node_ptr || !*node_ptr) return nullptr; // 
 
-        ZNode* node = *node_ptr; // Dereference the pointer to get the actual node
+        ZNode* node = *node_ptr; //dereference the pointer to get the actual node
 
-        hash.remove(std::string(name)); // Now remove safely
+        hash.remove(std::string(name)); // mow remove safely
         tree.del(node->get_key());
         return node;
     }
@@ -109,12 +106,11 @@ public:
     }
     
     bool remove_internal(std::string_view name) {
-        std::lock_guard<std::mutex> lock(mutex_);
         ZNode** node_ptr = hash.find(std::string(name));
-        if (!node_ptr || !*node_ptr) return false;  // 🔥 Ensure valid pointer
+        if (!node_ptr || !*node_ptr) return false;  
     
         ZNode* node = *node_ptr; // Dereference the pointer to get the actual node
-        hash.remove(std::string(name)); // Now remove safely
+        hash.remove(std::string(name)); // nnnnnooooow remove safely
         tree.del(node->get_key());
     
         return true; // Return success
@@ -135,7 +131,7 @@ public:
         
         nodes_.clear(); 
     
-        thread_pool_.shutdown();  // Shutdown the thread pool if it has an explicit shutdown mechanism.
+        thread_pool_.shutdown();  // shutdown the thread pool >:)
     }    
     
 };

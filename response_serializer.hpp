@@ -47,7 +47,8 @@ public:
 
     static void serialize_integer(std::vector<uint8_t>& buffer, int64_t value) {
         buffer.push_back(static_cast<uint8_t>(SerializationType::Integer));
-        append_data(buffer, value);
+        std::string str_value = std::to_string(value) + "\r\n";  // Convert integer to string format
+        buffer.insert(buffer.end(), str_value.begin(), str_value.end());
     }
 
     static void serialize_double(std::vector<uint8_t>& buffer, double value) {
@@ -72,10 +73,20 @@ public:
         if (buffer.empty() || buffer[0] != static_cast<uint8_t>(SerializationType::Integer)) {
             return -1; // Default error value
         }
+    
         int64_t value;
         std::memcpy(&value, buffer.data() + 1, sizeof(int64_t));
+    
+        // Debugging Output
+        std::cout << "🔍 Debug: Deserialized integer " << value << " from buffer [";
+        for (auto byte : buffer) {
+            std::cout << static_cast<int>(byte) << " ";
+        }
+        std::cout << "]" << std::endl;
+    
         return value;
     }
+    
 
     static std::string deserialize_error(const std::vector<uint8_t>& buffer) {
         if (buffer.empty() || buffer[0] != static_cast<uint8_t>(SerializationType::Error)) {

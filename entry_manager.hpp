@@ -62,7 +62,6 @@ public:
         if constexpr (std::is_same<T, std::unique_ptr<ZSet>>::value) {
             std::cout << "Key: " << key << " -> ZSet (Sorted Set) {" << std::endl;
             if (value) {
-                std::lock_guard<std::mutex> lock(value->mutex_);
                 for (const auto& node : value->nodes_) {
                     std::cout << "  " << node->get_key() << ": " << node->get_value() << std::endl;
                 }
@@ -81,7 +80,6 @@ private:
     HMap<std::string, std::shared_ptr<EntryBase>> db_;  
     BinaryHeap<uint64_t> heap_;                         
     ThreadPool thread_pool_;                            
-    mutable std::mutex mutex_;                        
 
 public:
     EntryManager(size_t thread_pool_size = 4)
@@ -89,7 +87,6 @@ public:
 
 
     std::shared_ptr<EntryBase> find_entry(const std::string& key) {
-        std::lock_guard<std::mutex> lock(mutex_);
         auto entry = db_.find(key); 
         return entry ? *entry : nullptr;
     }
@@ -99,43 +96,47 @@ public:
     std::shared_ptr<Entry<T>> create_entry(std::string key, T value) {
         static_assert(IsValidType<T>::value, "Invalid Redis type");
 
-        std::lock_guard<std::mutex> lock(mutex_);
         auto entry = std::make_shared<Entry<T>>(std::move(key), std::move(value));
         db_.insert(entry->key, entry);
         return entry;
     }
 
-    void delete_entry(const std::string& key) {
-        std::lock_guard<std::mutex> lock(mutex_);
+    bool delete_entry(const std::string& key) {
         auto entry = db_.find(key);
-        if (entry) {
-            if ((*entry)->heap_idx != static_cast<size_t>(-1)) {
-                remove_from_heap(**entry);
-            }
-            db_.remove(key); 
+        if (!entry) {
+            return false;  
         }
+    
+        if ((*entry)->heap_idx != static_cast<size_t>(-1)) {
+            remove_from_heap(**entry);
+        }
+        db_.remove(key);
+        return true;  
     }
     
-    void clear_all() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        db_.clear();  
-        heap_.clear();  
-    }
+    bool clear_all() {
+        db_.clear();
+        heap_.clear();
+        return db_.size() == 0 && heap_.size() == 0;
+    }    
+    
 
-    void set_entry_ttl(EntryBase& entry, int64_t ttl_ms) {
+    bool set_entry_ttl(EntryBase& entry, int64_t ttl_ms) {
         if (ttl_ms <= 0) {  
-            delete_entry(entry.key);
-            return;
+            return delete_entry(entry.key);  
         }
-
+    
         uint64_t expire_at = get_monotonic_usec() + static_cast<uint64_t>(ttl_ms) * 1000;
-
+    
         if (entry.heap_idx == static_cast<size_t>(-1)) {
             add_to_heap(entry, expire_at);
         } else {
             update_heap(entry, expire_at);
         }
+    
+        return true;
     }
+    
 
     int64_t get_expiry_time(EntryBase& entry) {
         uint64_t now = get_monotonic_usec();
@@ -150,40 +151,40 @@ public:
         return remaining_time > 0 ? remaining_time : -1; 
     }
 
-    void remove_from_heap(EntryBase& entry) {
-        if (entry.heap_idx >= heap_.size()) return;
+    bool remove_from_heap(EntryBase& entry) {
+        if (entry.heap_idx >= heap_.size()) return false;
         heap_.pop();
         entry.heap_idx = static_cast<size_t>(-1);
+        return true;
     }
 
-    void add_to_heap(EntryBase& entry, uint64_t expire_at) {
+
+    bool add_to_heap(EntryBase& entry, uint64_t expire_at) {
+        if (entry.heap_idx != static_cast<size_t>(-1)) {
+            return false;  // Entry is already in the heap
+        }
         heap_.push(HeapItem<uint64_t>(expire_at, &entry.heap_idx));
         entry.heap_idx = heap_.size() - 1;
         heap_.update(entry.heap_idx);
+        return true;  // Successfully added to the heap
     }
+    
 
-    void update_heap(EntryBase& entry, uint64_t new_expire_at) {
-        if (entry.heap_idx >= heap_.size()) return;
+    bool update_heap(EntryBase& entry, uint64_t new_expire_at) {
+        if (entry.heap_idx >= heap_.size()) return false;
         heap_[entry.heap_idx].set_value(new_expire_at);
         heap_.update(entry.heap_idx);
-    }
-
-    
-
-    void delete_entry_async(const std::string& key) {
-        thread_pool_.enqueue([this, key]() { 
-            delete_entry(key); 
-        });
-        thread_pool_.wait_for_tasks(); 
+        return true;
     }
     
 
-    // void print_db() const {
-    //     std::lock_guard<std::mutex> lock(mutex_);
-    //     for (const auto& [key, entry] : db_) {
-    //         entry->print();
-    //     }
+    // void delete_entry_async(const std::string& key) {
+    //     thread_pool_.enqueue([this, key]() { 
+    //         delete_entry(key); 
+    //     });
+    //     thread_pool_.wait_for_tasks(); 
     // }
+    
 };
 
 #endif // ENTRY_MANAGER_HPP

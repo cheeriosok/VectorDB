@@ -12,7 +12,9 @@ void handle_signal(int) {
         std::cout << "\nShutting down server gracefully...\n";
         global_server->stop();
     }
+    std::exit(0);
 }
+
 
 int main(int argc, char* argv[]) {
     try {

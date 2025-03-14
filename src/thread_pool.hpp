@@ -59,7 +59,7 @@ public:
         
     template<typename F, typename... Args>
     auto enqueue(F&& f, Args&&... args) {
-        using return_type = std::invoke_result_t<F, Args...>; // Fix: Explicitly declare return_type
+        using return_type = std::invoke_result_t<F, Args...>; // fix: Explicitly declare return_type
     
         auto task = std::make_shared<std::packaged_task<return_type()> >(
             std::bind(std::forward<F>(f), std::forward<Args>(args)...)
@@ -111,15 +111,15 @@ void worker() {
             std::unique_lock<std::mutex> lock(mutex_);
             condition_.wait(lock, [this] { return stop.load() || !tasks_.empty(); });
 
-            if (stop && tasks_.empty()) return; // Exit only when tasks are completely finished
+            if (stop && tasks_.empty()) return; // exit only when tasks are completely finished
 
             task = std::move(tasks_.front());
             tasks_.pop();
-            active_workers_++; // Increment active workers
+            active_workers_++; // increment active workers
         } 
-        task(); // Execute task
-        active_workers_--; // Decrement active workers after execution
-        condition_.notify_all(); // Notify that a task is done
+        task(); // execute task
+        active_workers_--; // Ddcrement active workers after execution
+        condition_.notify_all(); //notify that a task is done
     }
 }
 

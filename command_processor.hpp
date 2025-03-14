@@ -10,7 +10,7 @@
 #include <cstdint>       // std::uint64_t
 #include <algorithm>
 #include <utility>
-#include <mutex>         // std::mutex for thread safety
+#include <mutex>        
 #include "src/hashtable.hpp"
 #include "src/heap.hpp"
 #include "src/zset.hpp"
@@ -29,14 +29,13 @@ public:
         const std::vector<std::string>& args;
         std::vector<uint8_t>& response;
         EntryManager& entry_manager;
-        std::shared_mutex& db_mutex;
     };
 
     static const std::unordered_map<std::string, std::function<void(CommandContext)>> command_handlers;
 
     static void process_command(CommandContext ctx) {
         if (ctx.args.empty()) { 
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "empty command");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "empty command\n");
         }
         
         std::string command_key = ctx.args[0]; 
@@ -44,7 +43,7 @@ public:
 
         auto it = command_handlers.find(command_key);
         if (it == command_handlers.end()) { 
-            return ResponseSerializer::serialize_error(ctx.response, ERR_UNKNOWN, "unknown command");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_UNKNOWN, "unknown command\n");
         }
 
         it->second(ctx);
@@ -53,10 +52,9 @@ public:
 private:
     static void handle_get(CommandContext ctx) {
         if (ctx.args.size() != 2) { 
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "GET requires one key");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "GET requires one key\n");
         }
 
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
         auto entry = ctx.entry_manager.find_entry(ctx.args[1]);
         if (!entry) { 
             return ResponseSerializer::serialize_nil(ctx.response);
@@ -65,127 +63,132 @@ private:
         if (auto str_entry = std::dynamic_pointer_cast<Entry<std::string>>(entry)) {
             ResponseSerializer::serialize_string(ctx.response, str_entry->value);
         } else {
-            ResponseSerializer::serialize_error(ctx.response, ERR_TYPE, "Key holds wrong type");
+            ResponseSerializer::serialize_error(ctx.response, ERR_TYPE, "Key holds wrong type\n");
         }
     }
 
     static void handle_set(CommandContext ctx) {
         if (ctx.args.size() != 3) { 
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "SET requires key and value");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "SET requires key and value\n");
         }
-
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
+    
         ctx.entry_manager.create_entry(ctx.args[1], ctx.args[2]);
-        ResponseSerializer::serialize_nil(ctx.response);
-    }
+        ResponseSerializer::serialize_string(ctx.response, "OK");
+    }    
 
     static void handle_del(CommandContext ctx) {
         if (ctx.args.size() != 2) { 
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "DEL requires key");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "DEL requires key\n");
         }
-
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
-        ctx.entry_manager.delete_entry(ctx.args[1]);
-        ResponseSerializer::serialize_integer(ctx.response, 1);
+    
+        bool deleted = ctx.entry_manager.delete_entry(ctx.args[1]);
+        ResponseSerializer::serialize_integer(ctx.response, deleted ? 1 : 0);
     }
-
+    
+    
+    
     static void handle_exists(CommandContext ctx) {
         if (ctx.args.size() != 2) { 
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "EXISTS requires key");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "EXISTS requires key\n");
         }
-
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
+    
         auto entry = ctx.entry_manager.find_entry(ctx.args[1]);
         ResponseSerializer::serialize_integer(ctx.response, entry ? 1 : 0);
     }
-
+    
     static void handle_flushall(CommandContext ctx) {
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
-        ctx.entry_manager.clear_all();
-        ResponseSerializer::serialize_nil(ctx.response);
-    }
+        bool cleared = ctx.entry_manager.clear_all();
+        ResponseSerializer::serialize_integer(ctx.response, cleared ? 1 : 0);
+    }      
+    
 
     static void handle_zadd(CommandContext ctx) {
         if (ctx.args.size() != 4) { 
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "ZADD requires key, score, and member");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "ZADD requires key, score, and member\n");
         }
-
+    
         double score;
         if (!parse_double(ctx.args[2], score)) {
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "Invalid score value");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "Invalid score value\n");
         }
-
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
+    
         auto entry = ctx.entry_manager.find_entry(ctx.args[1]);
-
         std::shared_ptr<Entry<std::unique_ptr<ZSet>>> zset_entry;
+    
         if (entry) {
             zset_entry = std::dynamic_pointer_cast<Entry<std::unique_ptr<ZSet>>>(entry);
             if (!zset_entry) {
-                return ResponseSerializer::serialize_error(ctx.response, ERR_TYPE, "Key holds wrong type");
+                return ResponseSerializer::serialize_error(ctx.response, ERR_TYPE, "Key holds wrong type\n");
             }
         } else {
             auto new_entry = ctx.entry_manager.create_entry(ctx.args[1], std::make_unique<ZSet>());
             zset_entry = std::dynamic_pointer_cast<Entry<std::unique_ptr<ZSet>>>(new_entry);
         }
-
+    
         bool added = zset_entry->value->add_internal(ctx.args[3], score);
         ResponseSerializer::serialize_integer(ctx.response, added ? 1 : 0);
     }
+    
+    
 
     static void handle_zrem(CommandContext ctx) {
         if (ctx.args.size() != 3) { 
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "ZREM requires key and member");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "ZREM requires key and member\n");
         }
-
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
+    
         auto entry = ctx.entry_manager.find_entry(ctx.args[1]);
         if (!entry) { 
-            return ResponseSerializer::serialize_integer(ctx.response, 0);
+            ResponseSerializer::serialize_integer(ctx.response, 0);
+            return;
         }
-
+    
         auto zset_entry = std::dynamic_pointer_cast<Entry<std::unique_ptr<ZSet>>>(entry);
         if (!zset_entry) {
-            return ResponseSerializer::serialize_error(ctx.response, ERR_TYPE, "Key holds wrong type");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_TYPE, "Key holds wrong type\n");
         }
-
+    
         bool removed = zset_entry->value->remove_internal(ctx.args[2]); 
         ResponseSerializer::serialize_integer(ctx.response, removed ? 1 : 0);
     }
+    
 
     static void handle_pexpire(CommandContext ctx) {
         if (ctx.args.size() != 3) {
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "PEXPIRE requires key and TTL");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "PEXPIRE requires key and TTL\n");
         }
     
         int64_t ttl_ms;
         if (!parse_int(ctx.args[2], ttl_ms) || ttl_ms < 0) {
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "Invalid TTL value");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "Invalid TTL value\n");
         }
     
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
         auto entry = ctx.entry_manager.find_entry(ctx.args[1]);
         if (!entry) {
-            return ResponseSerializer::serialize_integer(ctx.response, 0);  // Key doesn't exist
+            ResponseSerializer::serialize_integer(ctx.response, 0);  // Key does not exist
+            return;
         }
     
-        ctx.entry_manager.set_entry_ttl(*entry, ttl_ms);
-        ResponseSerializer::serialize_integer(ctx.response, 1);
+        bool success = ctx.entry_manager.set_entry_ttl(*entry, ttl_ms);
+        ResponseSerializer::serialize_integer(ctx.response, success ? 1 : 0);
     }
+    
+    
+
     static void handle_pttl(CommandContext ctx) {
         if (ctx.args.size() != 2) {
-            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "PTTL requires key");
+            return ResponseSerializer::serialize_error(ctx.response, ERR_ARG, "PTTL requires key\n");
         }
     
-        std::lock_guard<std::shared_mutex> lock(ctx.db_mutex);
         auto entry = ctx.entry_manager.find_entry(ctx.args[1]);
         if (!entry) {
-            return ResponseSerializer::serialize_integer(ctx.response, -1);  // Key doesn't exist
+            ResponseSerializer::serialize_integer(ctx.response, -2);  // Redis returns -2 if key doesn't exist
+            return;
         }
     
         int64_t ttl = ctx.entry_manager.get_expiry_time(*entry);
         ResponseSerializer::serialize_integer(ctx.response, ttl);
     }
+    
     
     
 
@@ -223,7 +226,6 @@ private:
             return false;
         }
     }
-    
         // function to get current time in microseconds
     static std::uint64_t get_monotonic_usec() {
         using namespace std::chrono;
