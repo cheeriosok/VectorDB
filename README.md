@@ -42,8 +42,8 @@ Currently, this project is still **in progress** - and will serve as the foundat
 ## Installation & Build
 ### **Requirements**
 - **C++23 compiler** (GCC 11+/Clang 14+/MSVC 19.3+)
-- **CMake 3.20+**
-- **Linux/macOS (or WSL on Windows)**
+- **CMake 3.31+**
+- **Linux/macOS**
 
 ### **Build Instructions**
 1. **Clone the repository:**
