@@ -135,16 +135,16 @@ inline void Server::process_active_connections(const std::vector<pollfd>& poll_a
         if (it == connections_.end()) continue;
 
         auto& conn = it->second;
-        std::cout << "🔍 Processing connection: FD " << conn->fd() << std::endl;
+        std::cout << " Processing connection: FD " << conn->fd() << std::endl;
 
         try {
             auto result = conn->process_io();
             if (!result) {
-                std::cerr << "🔴 Closing connection: FD " << conn->fd() << std::endl;
+                std::cerr << "Closing connection: FD " << conn->fd() << std::endl;
                 remove_connection(conn->fd());
             }
         } catch (const std::exception& e) {
-            std::cerr << "❌ Connection error: " << e.what() << std::endl;
+            std::cerr << "Connection error: " << e.what() << std::endl;
             remove_connection(conn->fd());
         }
     }
@@ -186,7 +186,7 @@ inline void Server::accept_new_connections(const pollfd& listen_poll) {
             }
         }
 
-        std::cout << "✅ Accepted connection from " 
+        std::cout << " Accepted connection from " 
                   << inet_ntoa(client_addr.sin_addr) << ":" 
                   << ntohs(client_addr.sin_port) << std::endl;
         

@@ -67,7 +67,7 @@ std::string send_command(int sock, const std::string& command) {//fuck
         response.pop_back();
     }
 
-    std::cout << "🔹 Final Response: [" << response << "]\n";
+    std::cout << " Final Response: [" << response << "]\n";
     return response;
 }
 
@@ -126,7 +126,7 @@ void benchmark_response_time(int sock, const std::vector<std::string>& commands)
         double elapsed_us = duration_cast<microseconds>(end_time - start_time).count();
         response_times.push_back(elapsed_us);
 
-        std::cout << "🔹 [" << command << "] Response Time: " << elapsed_us << " µs\n";
+        std::cout << "[" << command << "] Response Time: " << elapsed_us << " µs\n";
     }
 
     double total_time = 0;

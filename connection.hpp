@@ -76,7 +76,7 @@ Result<void> Connection::process_io() {
     if (bytes_read > 0) {
         buffer[bytes_read] = '\0';  
         std::string request(buffer);
-        std::cout << "✅ Received command: " << request << std::endl;
+        std::cout << " Received command: " << request << std::endl;
 
         std::vector<std::string> args;
         std::istringstream iss(request);
@@ -93,9 +93,9 @@ Result<void> Connection::process_io() {
         ssize_t bytes_sent = write(socket_.get(), response_str.c_str(), response.size());
 
         if (bytes_sent < 0) {
-            std::cerr << "❌ Write failed: " << strerror(errno) << std::endl;
+            std::cerr << " Write failed: " << strerror(errno) << std::endl;
         } else {
-            std::cout << "✅ Sent response: " << response_str << std::endl;
+            std::cout << " Sent response: " << response_str << std::endl;
         }
 
         return {};
@@ -103,7 +103,7 @@ Result<void> Connection::process_io() {
         std::cerr << "Client disconnected.\n";
         return std::unexpected(std::make_error_code(std::errc::connection_reset));
     } else {
-        std::cerr << "❌ Read error: " << strerror(errno) << std::endl;
+        std::cerr << " Read error: " << strerror(errno) << std::endl;
         return std::unexpected(std::make_error_code(std::errc::io_error));
     }
 }

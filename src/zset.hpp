@@ -18,11 +18,6 @@ public:
 
     explicit ZSet(size_t threads = 4) : thread_pool_(threads) {} // initialize thread pool with a default of 4 worker threads
 
-    // std::future<bool> add(std::string_view name, double score) { // asynchronously adds a new entry
-    //     return thread_pool_.enqueue([this, name, score] { // enqueues the add operation in the thread pool
-    //         return add_internal(name, score); // calls the internal add function
-    //     });
-    // }
 
     ZNode* lookup(std::string_view name) {
         std::cerr << "Looking up: " << name << std::endl;
