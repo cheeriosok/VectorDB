@@ -2,6 +2,7 @@
 /*
 Reference for AVL LockFree
 Issues: Too much CAS, atomicity, the performance will suffer.
+Untested slop. Do not use as a reference.
 */
 
 #ifndef AVL_TREE_HPP
