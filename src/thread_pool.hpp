@@ -73,7 +73,7 @@ public:
                 throw std::runtime_error("Cannot enqueue on stopped ThreadPool");
             }
     
-            tasks_.emplace([task]() { (*task)(); });
+            condition_.wait(lock, [this] { return !tasks_.empty() || stop.load(); });
         }
         
         condition_.notify_one();
@@ -90,9 +90,10 @@ public:
 
     void wait_for_tasks() { 
         std::unique_lock<std::mutex> lock(mutex_);
-        condition_.wait(lock, [this] { return tasks_.empty() && active_workers_.load() == 0; });
+        condition_.wait(lock, [this] { 
+            return tasks_.empty() && active_workers_.load(std::memory_order_acquire) == 0; 
+        });
     }
-    
     
     void shutdown() {
         {
@@ -100,6 +101,14 @@ public:
             stop = true;
         }
         condition_.notify_all();
+        
+        for (auto& thread : threads_) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+
+        wait_for_tasks(); 
     }
 
 private:
@@ -109,22 +118,23 @@ void worker() {
         std::function<void()> task;
         {
             std::unique_lock<std::mutex> lock(mutex_);
-            condition_.wait(lock, [this] { return stop.load() || !tasks_.empty(); });
+            condition_.wait(lock, [this] { return !tasks_.empty() || stop.load(); });
 
             if (stop && tasks_.empty()) return; // exit only when tasks are completely finished
 
             task = std::move(tasks_.front());
             tasks_.pop();
-            active_workers_++; // increment active workers
+            active_workers_.fetch_add(1, std::memory_order_relaxed); 
         } 
         task(); // execute task
-        active_workers_--; // Ddcrement active workers after execution
+
+        active_workers_.fetch_sub(1, std::memory_order_relaxed);  
         condition_.notify_all(); //notify that a task is done
     }
 }
 
     std::vector<std::thread> threads_;
-    std::queue<std::function<void()>> tasks_; // a queue of tasks! 
+    std::deque<std::function<void()>> tasks_;
     std::atomic<size_t> active_workers_{0};
     mutable std::mutex mutex_; // Locking a resource so no other threads can grab it. *** We should replace this with a more efficient method for concurrency ***
     std::condition_variable condition_; 

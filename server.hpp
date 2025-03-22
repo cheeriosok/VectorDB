@@ -31,6 +31,7 @@ public:
     CommandProcessor command_processor_;
     EntryManager entry_manager_;
     std::atomic<bool> should_stop_;
+    
     Server(uint16_t port, size_t thread_pool_size)
         : port_(port), thread_pool_(thread_pool_size), 
           command_processor_(), entry_manager_(), should_stop_(false) {}

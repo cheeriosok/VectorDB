@@ -11,6 +11,8 @@
 #include <bit>
 #include <cassert>
 #include <bitset>
+#include <mutex>
+#include <shared_mutex>
 // To-Do: 
 /*
 1. Testing each Method - likely some inconsistencies in passing by ref/ptr (particularly in insert) 
@@ -102,7 +104,8 @@ public:
     
         uint64_t hash = hash_key(key);  // FIXED: Use correct `hash_key` function
         size_t pos = hash & mask_;
-    
+        std::cout << "[Insert] Key: " << key << ", Hash: " << hash << ", pos: " << pos << std::endl;
+        std::unique_lock lock(*bucket_locks_[pos]);          
         auto node = std::make_unique<HNode<K, V>>(std::move(key), std::move(value), hash);
         node->next_ = std::move(buckets_[pos]);          
         buckets_[pos] = std::move(node);
@@ -111,22 +114,21 @@ public:
     
 
     HNode<K, V>* lookup(const K& key) {
-        if (buckets_.empty()) {
-            return nullptr;
-        }
+        if (buckets_.empty()) return nullptr;
     
         uint64_t hash = hash_key(key);
         size_t pos = hash & mask_;
+    
+        std::shared_lock lock(*bucket_locks_[pos]);  // shared access for readers
         HNode<K, V>* current = buckets_[pos].get();
     
         while (current) {
-            if (current->key_ == key) {
-                return current;  // FIXED: Return full node, not just value
-            }
+            if (current->key_ == key) return current;
             current = current->next_.get();
         }
         return nullptr;
     }
+    
     
 
     // Accept anonymous comparator function and key, given the mask_ and position, get index current with raw ptr
@@ -138,6 +140,7 @@ public:
     
         uint64_t hash = hash_key(key);
         size_t pos = hash & mask_;
+        std::unique_lock lock(*bucket_locks_[pos]);  
         HNode<K, V>* current = buckets_[pos].get();
         HNode<K, V>* prev = nullptr;
     
@@ -168,7 +171,8 @@ public:
         if (pos >= buckets_.size()) {
             return nullptr;
         }
-    
+
+        std::unique_lock lock(*bucket_locks_[pos]);  
         auto node = std::move(buckets_[pos]);
         buckets_[pos] = std::move(node->next_);
         size_--;
@@ -187,6 +191,7 @@ public:
     
 private:
     std::vector<std::unique_ptr<HNode<K,V>>> buckets_; 
+    std::vector<std::unique_ptr<std::shared_mutex>> bucket_locks_;
     size_t mask_{0}; 
     size_t size_{0}; 
 
@@ -201,6 +206,11 @@ private:
         capacity = std::max(capacity, k_min_cap); 
         
         buckets_.resize(capacity);
+        bucket_locks_.resize(capacity);
+        for (size_t i = 0; i < capacity; ++i) {
+            bucket_locks_[i] = std::make_unique<std::shared_mutex>();
+        }
+
         mask_ = capacity - 1; 
         size_ = 0; 
     }
@@ -232,35 +242,44 @@ public:
 
     // If our primary HTable is empty, we 
     void insert(K key, V value) { 
-        // Initialize our primary_table to k_min_cap if empty. Ensuring capacity is at least 4. 
-        if (primary_table_.empty()) { 
+        std::unique_lock lock(map_mutex_);
+        if (primary_table_.empty()) {
             primary_table_ = HTable<K, V>(k_min_cap);
         }
         uint64_t hash = hash_key(key);
-        // uint64_t hash = hash_key(key);
-        // auto node = std::make_unique<HNode<K, V>>(std::move(key), std::move(value), hash);
-        // primary_table_.insert(std::move(key), std::move(value));  // FIXED: Pass both arguments
-        primary_table_.insert(key, value);  // FIXED: Pass key and value directly
-
-        // Here, we want to check if a resizing_table operation is taking place. If true, we skip starting a new resize operation.
-        if (!temporary_table_) {  // We calculate our load factor here as size/capacity 
-            size_t load_factor = primary_table_.size() / primary_table_.capacity();
-            if (load_factor >= k_max_load_factor) { //If our ratio exceeds our maximum tolerable load factor, then we commence a resize op.
-                start_resize();
-            }
+    
+        // Calculate the load factor using floating point division
+        double load_factor = static_cast<double>(primary_table_.size()) / primary_table_.capacity();
+        std::cout << "[Insert] Load factor: " << load_factor << " for key " << key << std::endl;
+        
+        // If the load factor exceeds the threshold, trigger resizing
+        if (load_factor >= k_max_load_factor) {
+            std::cout << "[Resize Triggered] Load factor exceeded threshold." << std::endl;
+            start_resize();
         }
-        help_resize(); // On every function call we'll find this method - it essentially offloads 15 items from our primary_table object
+    
+        primary_table_.insert(key, value);
+        lock.unlock();
+        help_resize();
     }
+    
+    
+    
+    
     
     // Pass in a key and comparator function. We call help_resize before to ensure our node isn't lost after the 15 swaps!
     V* find(const K& key) {
         help_resize();
     
-        if (auto* node = primary_table_.lookup(key)) {
-            return &(node->value_);
+        {
+            std::shared_lock lock(map_mutex_);  
+            
+            if (auto* node = primary_table_.lookup(key)) {
+                return &(node->value_);
+            }
         }
     
-        if (temporary_table_) {
+        if (temporary_table_) {  
             if (auto* node = temporary_table_->lookup(key)) {
                 return &(node->value_);
             }
@@ -268,12 +287,13 @@ public:
     
         return nullptr;
     }
-
+    
     // Once again, similar to find - We pass in a key and comparator function, and we call help_resize. We should call it earlier here as 
     // this improves our performance as keys are migrated to primary_DB, this increases our chances of finding the key in the first check.
     std::optional<V> remove(const K& key) {
         help_resize();
-    
+
+        std::unique_lock lock(map_mutex_);  // Lock for modifying structure
         if (auto node = primary_table_.remove(key)) {  // node is `std::optional<V>`
             return node;  // FIXED: return `std::optional<V>` directly
         }
@@ -290,11 +310,12 @@ public:
     
     
     std::unique_ptr<HNode<K, V>> steal_first_node(size_t& pos) {
-    if (!temporary_table_) {
-        return nullptr;
+        std::cout << "[Steal] pos=" << pos << std::endl;
+        std::unique_lock lock(map_mutex_);
+        if (!temporary_table_) return nullptr;
+        return temporary_table_->steal_first_node(pos);
     }
-    return temporary_table_->steal_first_node(pos);
-}
+    
 
     
     [[nodiscard]] size_t size() const noexcept {
@@ -318,41 +339,64 @@ private:
     HTable<K,V> primary_table_;
     std::optional<HTable<K,V>> temporary_table_;
     size_t resizing_pos_{0};
-
+    mutable std::shared_mutex map_mutex_;
     void help_resize() {
         // Sanity check! Do not proceed if resizing table does not exist
         if (!temporary_table_) {
+            std::cout << "[HelpResize] No temporary table. Skipping." << std::endl;
             return;
         }
-        // we set work_done to be 15 meaning - if work_done > 15, or there are no more nodes to process we exit the loop
-        // If w
+    
+        std::cout << "[Resize] Starting. pos=" << resizing_pos_ << ", size=" 
+                  << temporary_table_->size() << std::endl; 
+    
+        std::unique_lock lock(map_mutex_); 
         size_t work_done = 0;
+    
         while (work_done < max_work && !temporary_table_->empty()) {
-            // 'defensive programming' but probably unnecessary as we only increment when moving through empty buckets.
-            // Will leave it as it wont cause problems... probably
-            if (resizing_pos_ >= temporary_table_->capacity()) {
-                resizing_pos_ = 0;
-            }
-
-            // current bucket to process is indicating by resizing_pos_
+            std::cout << "[HelpResize] Attempting steal @ pos " << resizing_pos_ << std::endl;
+    
             auto node = temporary_table_->steal_first_node(resizing_pos_);
             if (node) {
+                std::cout << "[HelpResize] Moving key: " << node->key_ << std::endl;
                 primary_table_.insert(std::move(node->key_), std::move(node->value_));
+                work_done++;
+            } else {
+                std::cout << "[HelpResize] No node to steal at pos " << resizing_pos_ << ", incrementing." << std::endl;
+                resizing_pos_++;  // Only advance when the bucket is empty
+            }
+    
+            // Debug if resizing_pos_ goes out of bounds
+            if (resizing_pos_ >= temporary_table_->capacity()) {
+                std::cout << "[HelpResize] Warning: resizing_pos_ exceeded capacity. Resetting." << std::endl;
+                resizing_pos_ = 0;  // Reset if out of bounds
             }
         }
-
-        if (temporary_table_->empty()) { // If empty, we reset resizing_table (all buckets) and reinit resizing_pos to 0. Once LOAD FACTOR / CAPACITY > 8 it'll hold primary_table contents again via enplace node transfers.
+    
+        if (temporary_table_->empty()) { 
             temporary_table_.reset();
             resizing_pos_ = 0;
+            std::cout << "[HelpResize] Completed resizing, reset temporary_table." << std::endl;
         }
     }
+    
     void start_resize() {
-        assert(!temporary_table_); //  first a sanity check that resizing table doesn't already exist!
-        size_t new_capacity = primary_table_.capacity() * 2; // new_capacity will be 2x previous, this is fairly standard.
-        temporary_table_.emplace(std::move(primary_table_)); // Mark primary_table as an rvalue, and then transfer the contents emplace to resizing_table
-        primary_table_ = HTable<K,V>(new_capacity); // Create a new primary_table with the new doubled capacity 
-        resizing_pos_ = 0; // Pointer indicating which bucket we're putting into primary
+        std::unique_lock lock(map_mutex_);
+        assert(!temporary_table_); // First a sanity check that resizing table doesn't already exist!
+    
+        size_t new_capacity = primary_table_.capacity() * 2; // New capacity is 2x previous, this is a standard approach.
+        std::cout << "[Resize Start] New cap = " << new_capacity << std::endl;
+    
+        // Move the existing primary table's data to temporary table for resizing
+        temporary_table_.emplace(std::move(primary_table_)); 
+    
+        // Create a new primary table with the new doubled capacity
+        primary_table_ = HTable<K,V>(new_capacity); 
+    
+        resizing_pos_ = 0; // Set the position where we start migrating data from temporary table to primary table.
     }
+    
+    
 };
 
 #endif // HASH_TABLE_HPP

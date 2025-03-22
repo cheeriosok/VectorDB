@@ -1,6 +1,8 @@
 #ifndef LIST_HPP //
 #define LIST_HPP
 
+#include <mutex>
+
 // Forward declaration of DoubleLinkedList for ListNode to friend it
 template<typename T>
 class DoublyLinkedList;
@@ -114,21 +116,34 @@ public:
     DoublyLinkedList(DoublyLinkedList&&) noexcept = default; // but we set the move constructors as default
     DoublyLinkedList& operator=(DoublyLinkedList&&) noexcept = default; // and the operator is overloaded to only accept std::move rather than lvalue object instances
     
-    [[nodiscard]] Iterator begin() noexcept { return Iterator(head_.next_); } // beginning of list
-    [[nodiscard]] Iterator end() noexcept { return Iterator(&head_); } // end of list 
+    [[nodiscard]] Iterator begin() noexcept { 
+        std::shared_lock lock(list_mutex_);
+        return Iterator(head_.next_); 
+    } // beginning of list
+
+    [[nodiscard]] Iterator end() noexcept { 
+        std::shared_lock lock(list_mutex_);
+        return Iterator(&head_); 
+    } // end of list 
     
-    [[nodiscard]] bool empty() const noexcept { return !head_.is_linked(); } // if circular reference, our sentinel node is alone and thus the list is empty.
+    [[nodiscard]] bool empty() const noexcept { 
+        std::shared_lock lock(list_mutex_);
+        return !head_.is_linked(); 
+    } // if circular reference, our sentinel node is alone and thus the list is empty.
     
     void push_front(ListNode<T>& node) noexcept { // use ListNode insert_after method to push to the front of head.
+        std::unique_lock lock(list_mutex_);
         head_.insert_after(node);
     }
     
     void push_back(ListNode<T>& node) noexcept {  // use ListNode insert_after method to push to the back of head.
+        std::unique_lock lock(list_mutex_);
         head_.insert_before(node);
     }
 
 private:
     ListNode<T> head_; // sentinel node
+    mutable std::shared_mutex list_mutex_;  // ✅ Protects concurrent access
 };
 
 #endif // LIST_HPP

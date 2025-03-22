@@ -4,157 +4,112 @@
 AVL TREE TESTS
 */
 
-// #include "../avl.hpp"
+#include <thread>
+#include <vector>
+#include <unordered_set>
+#include <mutex>
 
-// TEST(AVLTreeTest, SetAndGetTest) {
-//     AVLTree<int,int> tree;
-    
-//     tree.set(10, 100);
-//     tree.set(20, 200);
-//     tree.set(30, 300);
+/*
+HASH TABLE TESTS
+*/
 
-//     EXPECT_EQ(tree.get(10), 100);
-//     EXPECT_EQ(tree.get(20), 200);
-//     EXPECT_EQ(tree.get(30), 300);
-//     EXPECT_EQ(tree.get(40), std::nullopt); // Non-existent key
-// }
+#include "../src/hashtable.hpp"
 
-// TEST(AVLTreeTest, DeleteTest) {
-//     AVLTree<int,int> tree;
-//     tree.set(10, 100);
-//     tree.set(20, 200);
-//     tree.set(30, 300);
-    
-//     EXPECT_TRUE(tree.exists(20)); 
-//     tree.del(20);
-//     EXPECT_FALSE(tree.exists(20)); 
-//     EXPECT_EQ(tree.get(20), std::nullopt); 
-// }
+// Test HTable insert and retrieval
+TEST(HTableTest, InsertAndGet) {
+    HTable<int, std::string> table;
 
-// TEST(AVLTreeTest, AVLBalanceTest) {
-//     AVLTree<int,int> tree;
-    
-//     tree.set(3, 300);
-//     tree.set(2, 200);
-//     tree.set(1, 100); 
+    table.insert(1, "one");
+    table.insert(2, "two");
+    table.insert(3, "three");
 
-//     EXPECT_EQ(tree.get(1), 100);
-//     EXPECT_EQ(tree.get(2), 200);
-//     EXPECT_EQ(tree.get(3), 300);
-// }
+    ASSERT_NE(table.lookup(1), nullptr);
+    EXPECT_EQ(table.lookup(1)->value_, "one");
 
-// TEST(AVLTreeTest, ExistsTest) {
-//     AVLTree<int,int> tree;
-    
-//     tree.set(5, 500);
-//     tree.set(10, 1000);
-//     tree.set(15, 1500);
+    ASSERT_NE(table.lookup(2), nullptr);
+    EXPECT_EQ(table.lookup(2)->value_, "two");
 
-//     EXPECT_TRUE(tree.exists(10));
-//     EXPECT_FALSE(tree.exists(20));
-// }
+    ASSERT_NE(table.lookup(3), nullptr);
+    EXPECT_EQ(table.lookup(3)->value_, "three");
 
-// /*
-// HASH TABLE TESTS
-// */
+    EXPECT_EQ(table.lookup(4), nullptr);  // Key 4 should not exist
+}
 
-// #include "../hashtable.hpp"
+// Test HTable removal
+TEST(HTableTest, Remove) {
+    HTable<int, std::string> table;
 
-// // Test HTable insert and retrieval
-// TEST(HTableTest, InsertAndGet) {
-//     HTable<int, std::string> table;
+    table.insert(10, "ten");
+    table.insert(20, "twenty");
+    table.insert(30, "thirty");
 
-//     table.insert(1, "one");
-//     table.insert(2, "two");
-//     table.insert(3, "three");
+    ASSERT_NE(table.lookup(20), nullptr);
+    table.remove(20);
+    EXPECT_EQ(table.lookup(20), nullptr);
+}
 
-//     ASSERT_NE(table.lookup(1), nullptr);
-//     EXPECT_EQ(table.lookup(1)->value_, "one");
+// Test HTable resizing
+TEST(HTableTest, ResizeTest) {
+    HTable<int, std::string> table;
 
-//     ASSERT_NE(table.lookup(2), nullptr);
-//     EXPECT_EQ(table.lookup(2)->value_, "two");
+    for (int i = 0; i < 100; i++) {
+        table.insert(i, "num" + std::to_string(i));
+    }
 
-//     ASSERT_NE(table.lookup(3), nullptr);
-//     EXPECT_EQ(table.lookup(3)->value_, "three");
+    for (int i = 0; i < 100; i++) {
+        ASSERT_NE(table.lookup(i), nullptr);
+        EXPECT_EQ(table.lookup(i)->value_, "num" + std::to_string(i));
+    }
+}
 
-//     EXPECT_EQ(table.lookup(4), nullptr);  // Key 4 should not exist
-// }
+// Test HMap insert and retrieval
+TEST(HMapTest, InsertAndGet) {
+    HMap<int, std::string> map;
 
-// // Test HTable removal
-// TEST(HTableTest, Remove) {
-//     HTable<int, std::string> table;
+    map.insert(1, "apple");
+    map.insert(2, "banana");
+    map.insert(3, "cherry");
 
-//     table.insert(10, "ten");
-//     table.insert(20, "twenty");
-//     table.insert(30, "thirty");
+    ASSERT_NE(map.find(1), nullptr);
+    EXPECT_EQ(*map.find(1), "apple");  // FIXED
 
-//     ASSERT_NE(table.lookup(20), nullptr);
-//     table.remove(20);
-//     EXPECT_EQ(table.lookup(20), nullptr);
-// }
+    ASSERT_NE(map.find(2), nullptr);
+    EXPECT_EQ(*map.find(2), "banana");  // FIXED
 
-// // Test HTable resizing
-// TEST(HTableTest, ResizeTest) {
-//     HTable<int, std::string> table;
+    ASSERT_NE(map.find(3), nullptr);
+    EXPECT_EQ(*map.find(3), "cherry");  // FIXED
 
-//     for (int i = 0; i < 100; i++) {
-//         table.insert(i, "num" + std::to_string(i));
-//     }
+    EXPECT_EQ(map.find(4), nullptr);  // Key 4 should not exist
+}
 
-//     for (int i = 0; i < 100; i++) {
-//         ASSERT_NE(table.lookup(i), nullptr);
-//         EXPECT_EQ(table.lookup(i)->value_, "num" + std::to_string(i));
-//     }
-// }
+// Test HMap removal
+TEST(HMapTest, RemoveTest) {
+    HMap<int, std::string> map;
 
-// // Test HMap insert and retrieval
-// TEST(HMapTest, InsertAndGet) {
-//     HMap<int, std::string> map;
+    map.insert(10, "ten");
+    map.insert(20, "twenty");
+    map.insert(30, "thirty");
 
-//     map.insert(1, "apple");
-//     map.insert(2, "banana");
-//     map.insert(3, "cherry");
+    ASSERT_NE(map.find(20), nullptr);
+    auto removed = map.remove(20);
+    EXPECT_TRUE(removed.has_value());
+    EXPECT_EQ(removed.value(), "twenty");
+    EXPECT_EQ(map.find(20), nullptr);
+}
 
-//     ASSERT_NE(map.find(1), nullptr);
-//     EXPECT_EQ(*map.find(1), "apple");  // FIXED
+// Test HMap resizing
+TEST(HMapTest, ResizeTest) {
+    HMap<int, std::string> map;
 
-//     ASSERT_NE(map.find(2), nullptr);
-//     EXPECT_EQ(*map.find(2), "banana");  // FIXED
+    for (int i = 0; i < 100; i++) {
+        map.insert(i, "num" + std::to_string(i));
+    }
 
-//     ASSERT_NE(map.find(3), nullptr);
-//     EXPECT_EQ(*map.find(3), "cherry");  // FIXED
-
-//     EXPECT_EQ(map.find(4), nullptr);  // Key 4 should not exist
-// }
-
-// // Test HMap removal
-// TEST(HMapTest, RemoveTest) {
-//     HMap<int, std::string> map;
-
-//     map.insert(10, "ten");
-//     map.insert(20, "twenty");
-//     map.insert(30, "thirty");
-
-//     ASSERT_NE(map.find(20), nullptr);
-//     auto removed = map.remove(20);
-//     EXPECT_TRUE(removed.has_value());
-//     EXPECT_EQ(removed.value(), "twenty");
-//     EXPECT_EQ(map.find(20), nullptr);
-// }
-
-// // Test HMap resizing
-// TEST(HMapTest, ResizeTest) {
-//     HMap<int, std::string> map;
-
-//     for (int i = 0; i < 100; i++) {
-//         map.insert(i, "num" + std::to_string(i));
-//     }
-
-//     for (int i = 0; i < 100; i++) {
-//         ASSERT_NE(map.find(i), nullptr);
-//         EXPECT_EQ(*map.find(i), "num" + std::to_string(i));  // FIXED
-//     }
-// }
+    for (int i = 0; i < 100; i++) {
+        ASSERT_NE(map.find(i), nullptr);
+        EXPECT_EQ(*map.find(i), "num" + std::to_string(i));  // FIXED
+    }
+}
 
 // /*
 //     Heap Test

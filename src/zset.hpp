@@ -15,24 +15,19 @@ public:
     HMap<std::string, ZNode*> hash; // Assuming HMap<K, V> uses string keys
     ThreadPool thread_pool_; // thread pool for handling asynchronous tasks
     std::vector<std::shared_ptr<ZNode>> nodes_; // Keeps ZNode alive
-
+    mutable std::shared_mutex zset_mutex_;
     explicit ZSet(size_t threads = 4) : thread_pool_(threads) {} // initialize thread pool with a default of 4 worker threads
 
 
     ZNode* lookup(std::string_view name) {
+        std::shared_lock lock(zset_mutex_);
         std::cerr << "Looking up: " << name << std::endl;
-
         ZNode** node_ptr = hash.find(std::string(name));
-        if (!node_ptr || !*node_ptr) { 
-            std::cerr << "lookup: No valid node found for: " << name << std::endl;
-            return nullptr;
-        }
-        std::cerr << "lookup: Successfully found node for: " << name << " with score: " << (*node_ptr)->get_value() << std::endl;
-        return *node_ptr;
+        return (node_ptr && *node_ptr) ? *node_ptr : nullptr;
     }
     
     bool add_internal(std::string_view name, double score) {
-    
+        std::unique_lock lock(zset_mutex_);  
         if (ZNode* node = lookup(name)) {
             update_score(node, score);
             return false;
@@ -65,17 +60,25 @@ public:
     // }
 
     ZNode* pop_internal(std::string_view name) {
-        ZNode** node_ptr = hash.find(std::string(name)); 
-        if (!node_ptr || !*node_ptr) return nullptr; // 
+        std::unique_lock lock(zset_mutex_);
+        ZNode** node_ptr = hash.find(std::string(name));
+        if (!node_ptr || !*node_ptr) return nullptr;
 
-        ZNode* node = *node_ptr; //dereference the pointer to get the actual node
-
-        hash.remove(std::string(name)); // mow remove safely
+        ZNode* node = *node_ptr;
+        hash.remove(std::string(name));
         tree.del(node->get_key());
+        lock.unlock();
+        {
+            nodes_.erase(std::remove_if(nodes_.begin(), nodes_.end(),
+                        [node](const std::shared_ptr<ZNode>& n) { return n.get() == node; }),
+                        nodes_.end());
+            }
         return node;
     }
+
     
     bool update_score(ZNode* node, double new_score) {
+        std::unique_lock lock(zset_mutex_);  
         if (!node) {
             std::cerr << "update_score: Received a nullptr!" << std::endl;
             return false;
@@ -101,15 +104,21 @@ public:
     }
     
     bool remove_internal(std::string_view name) {
+        std::unique_lock lock(zset_mutex_);
         ZNode** node_ptr = hash.find(std::string(name));
-        if (!node_ptr || !*node_ptr) return false;  
+        if (!node_ptr || !*node_ptr) return false;
     
-        ZNode* node = *node_ptr; // Dereference the pointer to get the actual node
-        hash.remove(std::string(name)); // nnnnnooooow remove safely
+        ZNode* node = *node_ptr;
+        hash.remove(std::string(name));  
         tree.del(node->get_key());
     
-        return true; // Return success
+        nodes_.erase(std::remove_if(nodes_.begin(), nodes_.end(),
+                     [node](const std::shared_ptr<ZNode>& n) { return n.get() == node; }),
+                     nodes_.end());
+    
+        return true;
     }
+    
 
     // std::future<bool> remove(std::string_view name) {
     //     return thread_pool_.enqueue([this, name] {
@@ -118,16 +127,17 @@ public:
     // }
     
     ZNode* query(double score, std::string_view name, int64_t offset) {
+        std::shared_lock lock(zset_mutex_);  
         return tree.exists(std::string(name)) ? lookup(name) : nullptr;
     }
 
     ~ZSet() {
-        hash.clear(); 
-        
-        nodes_.clear(); 
+        hash.clear();  
+        nodes_.clear();  
+        thread_pool_.wait_for_tasks(); 
+        thread_pool_.shutdown();
+    }
     
-        thread_pool_.shutdown();  // shutdown the thread pool >:)
-    }    
     
 };
 

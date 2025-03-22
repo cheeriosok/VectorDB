@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <mutex>
 
 template<typename T>
 class HeapItem;
@@ -16,6 +17,7 @@ public:
     explicit BinaryHeap(const Compare& comp) : compare_(comp) {}
     
     HeapItem<T>& operator[](std::size_t index) {
+        std::shared_lock lock(heap_mutex_);
         if (index >= items_.size()) {
             throw std::out_of_range("Index out of range");
         }
@@ -23,22 +25,23 @@ public:
     }    
 
     void push(HeapItem<T> item) { // push method = push HeapItem<T> item to the back of our vector - we sift locations up accordingly thereafter
+        std::unique_lock lock(heap_mutex_);
         items_.push_back(std::move(item));
         sift_up(items_.size() - 1);
     }
 
-    [[nodiscard]] const HeapItem<T>& top() const { // Top method = read index 0 of items, read-only (immutable)
-        if (empty()) {
-            throw std::out_of_range("Heap is empty");
-        }
-        return items_[0];
-    }
+    [[nodiscard]] std::optional<HeapItem<T>> top() const {
+        std::shared_lock lock(heap_mutex_);
+        if (empty()) return std::nullopt;
+        return items_[0]; 
+    }    
 
     HeapItem<T> pop() { 
+        std::unique_lock lock(heap_mutex_);        
+
         if (empty()) {
             throw std::out_of_range("Heap is empty");
         }
-        
         HeapItem<T> result = std::move(items_[0]); // move our items_[0] to our result. Since we popped our element - we must 
         if (size() > 1) {
             items_[0] = std::move(items_.back());
@@ -51,16 +54,17 @@ public:
     }
 
     void pop_back() {
+        std::unique_lock lock(heap_mutex_);
         if (!items_.empty()) {
             items_.pop_back();
         }
     }    
 
     void update(std::size_t pos) {
+        std::unique_lock lock(heap_mutex_);
         if (pos >= items_.size()) {
             throw std::out_of_range("Position out of range");
         }
-        
         if (pos > 0 && compare_(items_[pos].value_, items_[parent(pos)].value_)) {
             sift_up(pos);
         } else {
@@ -69,27 +73,34 @@ public:
     }
 
     void swap(std::size_t i, std::size_t j) {
+        std::unique_lock lock(heap_mutex_);  
         if (i >= items_.size() || j >= items_.size()) {
             throw std::out_of_range("swap: Invalid index");
         }
         std::swap(items_[i], items_[j]);
-    
-        // Update position tracking if necessary
-        if (items_[i].position_ref_) *items_[i].position_ref_ = i;
-        if (items_[j].position_ref_) *items_[j].position_ref_ = j;
+        update(i);  
+        update(j);
     }
-
+    
     void clear() {
-        items_.clear();  
+        std::unique_lock lock(heap_mutex_);
+        std::vector<HeapItem<T>>().swap(items_);  // ✅ Force memory deallocation
     }
     
-    [[nodiscard]] bool empty() const noexcept { return items_.empty(); }
-    [[nodiscard]] std::size_t size() const noexcept { return items_.size(); }
+    [[nodiscard]] bool empty() const noexcept { 
+        std::shared_lock lock(heap_mutex_);
+        return items_.empty(); 
+    }
+    [[nodiscard]] std::size_t size() const noexcept { 
+        std::shared_lock lock(heap_mutex_);
+        return items_.size(); 
+    }
     
 private:
     std::vector<HeapItem<T>> items_; // So we have a vector of HeapItems with any type
     Compare compare_; // and a comparator function (for our MinHeap functionality)
     // fancy way of swapping parent and child (our node at pos) until our child satisfies the comparator property thereby sifting it up the tree!
+    mutable std::shared_mutex heap_mutex_;     
     void sift_up(std::size_t pos) { // position in array as an argument to push_up our item
         HeapItem<T> temp = std::move(items_[pos]); // let's grab that object through movement (no copy)
         
