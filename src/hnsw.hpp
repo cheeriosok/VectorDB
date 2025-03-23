@@ -34,10 +34,17 @@ public:
         deleted_(false),
         neighbors_(level + 1) {}
     
-    void del() {
-        HNSWNode.deleted_ = true;
-    }
-    
+    const std::vector<std::weak_ptr<HNSWNode>>& getNeighbor(size_t level) const;
+    size_t getNeighborCount(size_t level) const;
+    bool addNeighbor(size_t level, const std::weak_ptr<HNSWNode>& neighbor);
+    bool removeNeighbor(size_t level, const std::weak_ptr<HNSWNode>& neighbor);
+    void lockNode();
+    void unlockNode();
+    const float& getNorm() const;
+    const std::array<float, DIM>& getEmbedding() const;
+    size_t getLevel() const;
+    void markDeleted();
+    bool isDeleted();
 };
 
 
