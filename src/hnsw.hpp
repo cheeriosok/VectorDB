@@ -45,6 +45,7 @@ public:
     size_t getLevel() const;
     void markDeleted();
     bool isDeleted();
+    
 };
 
 
