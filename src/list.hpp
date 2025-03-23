@@ -1,4 +1,4 @@
-#ifndef LIST_HPP //
+#ifndef LIST_HPP 
 #define LIST_HPP
 
 #include <mutex>
