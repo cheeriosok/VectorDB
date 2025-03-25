@@ -5,34 +5,45 @@
 #include <memory>
 #include <mutex>
 #include <limits>
-#include <optional>
 #include <unordered_set>
+#include <optional>
+#include <thread>
+#include <sstream>
+#include <gtest/gtest.h>
 
-// Thread-compatible SkipList using unique_ptr for safe ownership
+inline std::string thread_id_str() {
+    std::ostringstream oss;
+    oss << std::this_thread::get_id();
+    return oss.str();
+}
 
 template <typename Key, typename Value>
 class SkipList {
+private:
     static constexpr int MAX_LEVEL = 16;
     static constexpr float PROBABILITY = 0.5f;
 
     struct Node {
         Key key;
         Value value;
-        std::vector<std::unique_ptr<Node>> forward;
-        std::vector<Node*> forward_raw;
+        std::vector<std::atomic<Node*>> next;
+        std::atomic<bool> marked;
         std::mutex node_lock;
 
         Node(const Key& k, const Value& v, int level)
-        : key(k), value(v), forward(MAX_LEVEL), forward_raw(MAX_LEVEL, nullptr) {}
-    
+            : key(k), value(v), next(level), marked(false) {
+            for (int i = 0; i < level; ++i) {
+                next[i].store(nullptr, std::memory_order_relaxed);
+            }
+        }
     };
 
     std::unique_ptr<Node> head;
+    std::unique_ptr<Node> tail;
     std::atomic<int> currentLevel;
-    std::mutex global_lock;
-
     std::mt19937 gen;
     std::uniform_real_distribution<float> dist;
+
 
     int randomLevel() {
         int lvl = 1;
@@ -41,213 +52,168 @@ class SkipList {
         return lvl;
     }
 
-public:
-SkipList() {
-    head = std::make_unique<Node>(std::numeric_limits<Key>::min(), Value(), MAX_LEVEL);
-
-    // Explicitly initialize all forward pointers to nullptr
-    for (int i = 0; i < MAX_LEVEL; ++i) {
-        head->forward[i] = nullptr;
-        head->forward_raw[i] = nullptr;
+    public:
+        SkipList()
+        : head(std::make_unique<Node>(std::numeric_limits<Key>::min(), Value{}, MAX_LEVEL)),
+        tail(std::make_unique<Node>(std::numeric_limits<Key>::max(), Value{}, MAX_LEVEL)),
+        currentLevel(1),
+        gen(std::random_device{}()),
+        dist(0.0f, 1.0f)
+    {
+        for (int i = 0; i < MAX_LEVEL; ++i) {
+            head->next[i].store(tail.get(), std::memory_order_relaxed);
+            // 👇 This connects tail permanently (you must not delete tail manually)
+        }
     }
-
-    currentLevel.store(1);
-    gen = std::mt19937(1337);
-    dist = std::uniform_real_distribution<float>(0.0f, 1.0f);
-}
 
 
     ~SkipList() {
-        std::lock_guard<std::mutex> lock(global_lock);
-        std::mutex level_update_lock;
-        std::unique_ptr<Node>& current = head->forward[0];
-        while (current) {
-            current = std::move(current->forward[0]);
+        Node* node = head->next[0].load();
+        while (node && node != tail.get()) {
+            Node* next = node->next[0].load();
+            delete node;
+            node = next;
         }
-        head.reset();
+    }
+    
+    
+
+    bool find(const Key& key, std::vector<Node*>& preds, std::vector<Node*>& succs) {
+        bool valid = true;
+        Node* pred = head.get();
+        for (int level = currentLevel - 1; level >= 0; --level) {
+            Node* curr = pred->next[level].load(std::memory_order_acquire);
+            while (true) {
+                if (curr->marked.load(std::memory_order_acquire)) {
+                    curr = curr->next[level].load(std::memory_order_acquire);
+                    continue;
+                }
+                if (curr->key < key) {
+                    pred = curr;
+                    curr = curr->next[level].load(std::memory_order_acquire);
+                } else {
+                    break;
+                }
+            }
+            preds[level] = pred;
+            succs[level] = curr;
+        }
+        return true;
     }
 
-    bool get(const Key& key, Value& value_out) {
-        Node* current = head.get();
-        int lvl = currentLevel.load();
-    
-        for (int i = lvl - 1; i >= 0; --i) {
+    bool contains(const Key& key) const {
+        Node* curr = head.get();
+        for (int level = currentLevel - 1; level >= 0; --level) {
             while (true) {
-                if (i >= current->forward_raw.size()) break;
-                Node* next = current->forward_raw[i];
-                if (!next || next->key >= key) break;
-                current = next;
+                Node* next = curr->next[level].load(std::memory_order_acquire);
+                if (!next) break; // ☠️ null protection
+                if (next->key < key) {
+                    curr = next;
+                } else {
+                    break;
+                }
             }
         }
     
-        current = current->forward_raw[0];
-        if (current && current->key == key) {
-            std::lock_guard<std::mutex> lock(current->node_lock);
-            value_out = current->value;
+        Node* next = curr->next[0].load(std::memory_order_acquire);
+        return (next && next->key == key && !next->marked.load(std::memory_order_acquire));
+    }
+    
+
+
+    [[nodiscard]] bool add(const Key& key, const Value& value) {
+        int topLevel = randomLevel();
+        std::vector<Node*> preds(MAX_LEVEL), succs(MAX_LEVEL);
+    
+        while (true) {
+            find(key, preds, succs);
+    
+            Node* found = succs[0];
+            if (found->key == key && !found->marked.load(std::memory_order_acquire)) {
+                return false;  // already exists
+            }
+    
+            Node* newNode = new Node(key, value, topLevel);
+            for (int level = 0; level < topLevel; ++level)
+                newNode->next[level].store(succs[level], std::memory_order_relaxed);
+    
+            // 🔐 Lock & validate
+            std::array<std::unique_lock<std::mutex>, MAX_LEVEL> predLocks;
+            for (int level = 0; level < topLevel; ++level)
+                predLocks[level] = std::unique_lock<std::mutex>(preds[level]->node_lock);
+    
+            bool valid = true;
+            for (int level = 0; level < topLevel; ++level) {
+                if (preds[level]->next[level].load(std::memory_order_acquire) != succs[level]) {
+                    valid = false;
+                    break;
+                }
+            }
+    
+            if (!valid) {
+                delete newNode;
+                continue;
+            }
+    
+            // 🔄 Insert node
+            for (int level = 0; level < topLevel; ++level)
+                preds[level]->next[level].store(newNode, std::memory_order_release);
+    
+            // ⬆️ Update list level if needed
+            int curLevel = currentLevel.load(std::memory_order_relaxed);
+            while (topLevel > curLevel && !currentLevel.compare_exchange_weak(curLevel, topLevel)) {}
+    
             return true;
         }
-        return false;
     }
     
-    void set(const Key& key, const Value& value) {
-        std::cout << "[set] Thread entering set with key: " << key << std::endl;
+
+    [[nodiscard]] bool remove(const Key& key) {
+        std::vector<Node*> preds(MAX_LEVEL), succs(MAX_LEVEL);
+        Node* victim = nullptr;
+        bool isMarked = false;
     
-        std::vector<Node*> update(MAX_LEVEL);
-        Node* current = head.get();
-        int lvl = currentLevel.load();
+        while (true) {
+            find(key, preds, succs);
+            victim = succs[0];
     
-        // Traverse and fill update[i]
-        for (int i = lvl - 1; i >= 0; --i) {
-            Node* next = current->forward[i].get();
-            while (next && next->key < key) {
-                current = next;
-                next = current->forward[i].get();
+            if (victim->key != key)
+                return false;
+    
+            // 🔒 Mark victim logically deleted
+            if (!isMarked) {
+                std::lock_guard<std::mutex> lock(victim->node_lock);
+                if (victim->marked.load(std::memory_order_acquire)) return false;
+                victim->marked.store(true, std::memory_order_release);
+                isMarked = true;
             }
-            update[i] = current;
-        }
     
-        // Handle potential level promotion first — thread-safe
-        int newLevel = randomLevel();
-        int oldLevel = currentLevel.load();
-        if (newLevel > oldLevel) {
-            {
-                static std::mutex level_update_lock;
-                std::lock_guard<std::mutex> guard(level_update_lock);
-                int cur = currentLevel.load();
-                if (newLevel > cur) {
-                    for (int i = cur; i < newLevel; ++i) {
-                        update[i] = head.get();  // fill the new higher levels
-                    }
-                    currentLevel.store(newLevel);
+            // 🔐 Lock preds and validate
+            std::array<std::unique_lock<std::mutex>, MAX_LEVEL> predLocks;
+            bool valid = true;
+            for (int level = 0; level < victim->next.size(); ++level)
+                predLocks[level] = std::unique_lock<std::mutex>(preds[level]->node_lock);
+    
+            for (int level = 0; level < victim->next.size(); ++level) {
+                if (preds[level]->next[level].load(std::memory_order_acquire) != victim) {
+                    valid = false;
+                    break;
                 }
             }
+    
+            if (!valid)
+                continue;
+    
+            // 🧹 Physically remove node
+            for (int level = victim->next.size() - 1; level >= 0; --level)
+                preds[level]->next[level].store(victim->next[level].load(std::memory_order_acquire), std::memory_order_release);
+    
+            delete victim;
+            return true;
         }
-    
-        // Collect all unique nodes in update[] up to newLevel
-        std::unordered_set<Node*> unique_nodes;
-        for (int i = 0; i < newLevel; ++i) {
-            unique_nodes.insert(update[i]);
-        }
-    
-        // Sort nodes by memory address for consistent lock ordering
-        std::vector<Node*> nodes_to_lock(unique_nodes.begin(), unique_nodes.end());
-        std::sort(nodes_to_lock.begin(), nodes_to_lock.end());
-    
-        // Acquire locks
-        std::vector<std::unique_lock<std::mutex>> acquired_locks;
-        std::cout << "[set] Acquiring locks..." << std::endl;
-        for (Node* node : nodes_to_lock) {
-            std::cout << "  [set] Locking node with key: " << node->key << std::endl;
-            acquired_locks.emplace_back(node->node_lock);
-        }
-    
-        // Check if key exists and update
-        Node* next = update[0]->forward_raw[0];
-        if (next && next->key == key) {
-            std::cout << "[set] Key exists. Updating value for key: " << key << std::endl;
-        
-            // Prevent double-locking if next is already in the locked set
-            bool already_locked = unique_nodes.count(next) > 0;
-        
-            if (!already_locked) {
-                std::lock_guard<std::mutex> lock(next->node_lock);
-                next->value = value;
-            } else {
-                // Already locked via acquired_locks
-                next->value = value;
-            }
-        
-        } else {
-            std::cout << "[set] Inserting new key: " << key << " at level: " << newLevel << std::endl;
-        
-            auto newNode = std::make_unique<Node>(key, value, MAX_LEVEL);
-            Node* newNodeRaw = newNode.get();
-        
-            // Set forward pointers of new node
-            for (int i = 0; i < newLevel; ++i) {
-                newNode->forward[i] = std::move(update[i]->forward[i]);
-                newNode->forward_raw[i] = newNode->forward[i] ? newNode->forward[i].get() : nullptr;
-            }
-            for (int i = newLevel; i < MAX_LEVEL; ++i)
-                newNode->forward_raw[i] = nullptr;
-        
-            // Link update[i] → newNode
-            for (int i = 0; i < newLevel; ++i) {
-                if (i == 0) {
-                    update[i]->forward[i] = std::move(newNode);
-                    update[i]->forward_raw[i] = update[i]->forward[i].get();
-                } else {
-                    update[i]->forward[i] = nullptr;
-                    update[i]->forward_raw[i] = newNodeRaw;
-                }
-            }
-        }
-        
-    
-        std::cout << "[set] Done with key: " << key << std::endl;
     }
     
-    
-    
-    void del(const Key& key) {
-        std::cout << "[del] Thread deleting key: " << key << std::endl;
-    
-        std::vector<Node*> update(MAX_LEVEL);
-        Node* current = head.get();
-        int lvl = currentLevel.load();
-    
-        for (int i = lvl - 1; i >= 0; --i) {
-            while (true) {
-                if (i >= current->forward_raw.size()) break;
-                Node* next = current->forward_raw[i];
-                if (!next || next->key >= key) break;
-                current = next;
-            }
-            update[i] = current;
-        }
-    
-        std::unordered_set<Node*> seen;
-        std::vector<std::unique_lock<std::mutex>> locks;
-    
-        for (int i = 0; i < lvl; ++i) {
-            if (update[i] && seen.insert(update[i]).second) {
-                std::cout << "[del] Locking node with key: " << update[i]->key << std::endl;
-                locks.emplace_back(update[i]->node_lock);
-            }
-        }
-    
-        Node* target = update[0]->forward_raw[0];
-        if (!target || target->key != key) {
-            std::cout << "[del] Target key " << key << " not found. Skipping.\n";
-            return;
-        }
-    
-        std::cout << "[del] Locking target key: " << target->key << std::endl;
-        locks.emplace_back(target->node_lock);
-    
-        int targetLevel = static_cast<int>(target->forward.size());
-        std::cout << "[del] Unlinking target at " << targetLevel << " levels.\n";
-    
-        for (int i = 0; i < targetLevel; ++i) {
-            if (i >= update[i]->forward_raw.size()) continue;
-            if (update[i]->forward_raw[i] == target) {
-                if (target->forward[i]) {
-                    update[i]->forward[i] = std::move(target->forward[i]);
-                    update[i]->forward_raw[i] = update[i]->forward[i].get();
-                    std::cout << "  [del] Updated level " << i << " with next node\n";
-                } else {
-                    update[i]->forward_raw[i] = target->forward_raw[i];
-                    std::cout << "  [del] Cleared level " << i << " raw pointer only\n";
-                }
-            }
-        }
-    
-        while (currentLevel.load() > 1 && !head->forward_raw[currentLevel.load() - 1]) {
-            std::cout << "[del] Decreasing currentLevel from " << currentLevel << std::endl;
-            currentLevel.store(currentLevel.load() - 1);
-        }
-    
-        std::cout << "[del] Done deleting key: " << key << std::endl;
-    }
+
+
     
 };

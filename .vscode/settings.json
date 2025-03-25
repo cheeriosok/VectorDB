@@ -48,6 +48,13 @@
         "streambuf": "cpp",
         "unordered_map": "cpp",
         "variant": "cpp",
-        "algorithm": "cpp"
-    }
+        "algorithm": "cpp",
+        "atomic": "cpp",
+        "condition_variable": "cpp",
+        "thread": "cpp",
+        "future": "cpp"
+    },
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/src"
+    ]
 }
