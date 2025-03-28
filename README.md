@@ -1,9 +1,10 @@
-# Key Value Server (KVS)
+# Key Value Server (KVS) -> VectorDB 
 
 ## Overview
-This project is a high-performance, networked key-value store that supports **hash maps, sorted sets (ZSets), TTL-based expiration, and efficient multi-threading** using a thread pool. The system is designed with **modern C++ (C++23)**, leveraging **RAII, std::expected, spans, and shared mutexes** to ensure optimal performance and safety.
+This project is a working high-performance, networked key-value store that supports **hash maps, sorted sets (ZSets), TTL-based expiration, and efficient multi-threading** using a thread pool. The system is designed with **modern C++ (C++23)**, leveraging **RAII, std::expected, spans, and shared mutexes** to ensure optimal performance and safety. 
 
-Currently, this project is still **in progress** - and will serve as the foundation for a feature store in the future. 
+Currently, this project is still **in progress** - and will serve as the foundation for a vector store in the future. 
+If it is not already clear, this is pedagogical and not suitable for any workload.  
 
 ### Key Features
 - **Asynchronous Networking:** Uses non-blocking I/O (`poll`) for efficient connection handling.
@@ -87,12 +88,12 @@ echo "GET key1" | nc localhost 1234
 
 ---
 
-## **Performance Optimization**
+## **Performance Optimizations / Coming Soon**
 - **Unit and Integration Testing**
 - **Memory Pooling and Lock-Free Data Structures**
 - **Zero/Copy Send/Recv**
 - **Thread Affinity & NUMA Awareness**
-- **Viewstamped Replication**
+- **Raft Replication**
 - **Multi-Tiered Caching w/ w-TinyLFU**
 - **Zero-copy string parsing with `std::span`**
 - **Minimized system calls with batch processing**
@@ -100,16 +101,7 @@ echo "GET key1" | nc localhost 1234
 - **Cache-friendly data structures**
 - **Efficient memory management using RAII**
 
----
 
-## Contributing
-Contributions are welcome! Please follow the coding guidelines:
-1. **Follow Modern C++ best practices** (C++20/23 features preferred).
-2. **Write unit tests** for new features.
-3. **Use smart pointers** instead of raw pointers.
-4. **Ensure thread safety** when modifying global state.
-
----
 
 ## License
 This project is licensed under the MIT License. See `LICENSE` for details.
