@@ -52,7 +52,13 @@
         "atomic": "cpp",
         "condition_variable": "cpp",
         "thread": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "__mutex_base": "cpp",
+        "__threading_support": "cpp",
+        "fstream": "cpp",
+        "ostream": "cpp",
+        "system_error": "cpp",
+        "memory": "cpp"
     },
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/src"

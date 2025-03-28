@@ -62,7 +62,6 @@ private:
     {
         for (int i = 0; i < MAX_LEVEL; ++i) {
             head->next[i].store(tail.get(), std::memory_order_relaxed);
-            // 👇 This connects tail permanently (you must not delete tail manually)
         }
     }
 
@@ -106,7 +105,7 @@ private:
         for (int level = currentLevel - 1; level >= 0; --level) {
             while (true) {
                 Node* next = curr->next[level].load(std::memory_order_acquire);
-                if (!next) break; // ☠️ null protection
+                if (!next) break; 
                 if (next->key < key) {
                     curr = next;
                 } else {
@@ -137,7 +136,6 @@ private:
             for (int level = 0; level < topLevel; ++level)
                 newNode->next[level].store(succs[level], std::memory_order_relaxed);
     
-            // 🔐 Lock & validate
             std::array<std::unique_lock<std::mutex>, MAX_LEVEL> predLocks;
             for (int level = 0; level < topLevel; ++level)
                 predLocks[level] = std::unique_lock<std::mutex>(preds[level]->node_lock);
@@ -155,11 +153,9 @@ private:
                 continue;
             }
     
-            // 🔄 Insert node
             for (int level = 0; level < topLevel; ++level)
                 preds[level]->next[level].store(newNode, std::memory_order_release);
     
-            // ⬆️ Update list level if needed
             int curLevel = currentLevel.load(std::memory_order_relaxed);
             while (topLevel > curLevel && !currentLevel.compare_exchange_weak(curLevel, topLevel)) {}
     
@@ -204,7 +200,6 @@ private:
             if (!valid)
                 continue;
     
-            // 🧹 Physically remove node
             for (int level = victim->next.size() - 1; level >= 0; --level)
                 preds[level]->next[level].store(victim->next[level].load(std::memory_order_acquire), std::memory_order_release);
     
