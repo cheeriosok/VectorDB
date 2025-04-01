@@ -1,2 +1,3 @@
 /src/hnsw/hnsw_solved/*
 /.vscode
+raft/raft.hpp
