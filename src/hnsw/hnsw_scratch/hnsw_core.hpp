@@ -223,19 +223,17 @@ public:
             return return_label;
     }
 
-    inline size_t setExternalLabel(unsigned int internal_id, size_t label) const {
-        memcpy((level0_data_ + (internal_id * element_stride_) + label_offset_), &label, sizeof(size_t));
+    inline size_t* getExternalLabelp(unsigned int internal_id) const {
+        return (size_t *)(level0_data_ + internal_id * element_stride_ + label_offset_);
     }
 
-
-    inline size_t* getExternalLabelp(unsigned int internal_id) const {
-            return (size_t *)(level0_data_ + internal_id * element_stride_ + label_offset_);
+    inline size_t setExternalLabel(unsigned int internal_id, size_t label) const {
+        memcpy((level0_data_ + (internal_id * element_stride_) + label_offset_), &label, sizeof(size_t));
     }
 
     inline char* getDataByInternalId(size_t internal_id) const {
         return (level0_data_ + internal_id * element_stride_ + data_offset_);
     }
-
 
     // my guess reverse is an input for testing and functionla programming purposes.
     int getRandomLevel(double reverse) {
@@ -256,14 +254,73 @@ public:
         return deleted_count_;
     }
 
+
+    unsigned int* get_level0_neighbors(unsigned int internal_id) const {
+        return (unsigned int*)(level0_data_ + internal_id * size_data_per_element_ + offsetLevel0_);
+    }
+    
+    unsigned int* get_level0_neighbors_from(unsigned int internal_id, char* data_level0_memory) const {
+        return (unsigned int*)(data_level0_memory + internal_id * size_data_per_element_ + offsetLevel0_);
+    }
+    
+    unsigned int* get_level_neighbors(unsigned int internal_id, int level) const {
+        return (unsigned int*)(linkLists_[internal_id] + (level - 1) * size_links_per_element_);
+    }
+    
+    unsigned int* get_neighbors_at_level(unsigned int internal_id, int level) const {
+        return level == 0 ? get_level0_neighbors(internal_id) : get_level_neighbors(internal_id, level);
+    }
+    
+
+
+    bool isMarkedDeleted(unsigned int internalId) const {
+        unsigned char *current = ((unsigned char*)get_linklist0(internalId)) + 2;
+        return *ll_cur & DELETE_MARK;
+    }
+
+
+    unsigned short int getListCount(linklistsizeint * ptr) const {
+        return *((unsigned short int *)ptr);
+    }
+
+
+    void setListCount(linklistsizeint * ptr, unsigned short int size) const {
+        *((unsigned short int*)(ptr))=*((unsigned short int *)&size);
+    }
+
+    linklistsizeint *get_linklist0(tableint internal_id) const {
+        return (linklistsizeint *) (data_level0_memory_ + internal_id * size_data_per_element_ + offsetLevel0_);
+    }
+
+
+    linklistsizeint *get_linklist0(tableint internal_id, char *data_level0_memory_) const {
+        return (linklistsizeint *) (data_level0_memory_ + internal_id * size_data_per_element_ + offsetLevel0_);
+    }
+
+
+    linklistsizeint *get_linklist(tableint internal_id, int level) const {
+        return (linklistsizeint *) (linkLists_[internal_id] + (level - 1) * size_links_per_element_);
+    }
+
+
+    linklistsizeint *get_linklist_at_level(tableint internal_id, int level) const {
+        return level == 0 ? get_linklist0(internal_id) : get_linklist(internal_id, level);
+    }
+
     std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst>
     searchBaseLayer(unsigned int search_start_id, const void *data, int layer) {
         VisitedList *visited_list = visited_pool_->getFreeVisitedList();
-        unsigned short int visited_Array = visited_list->mass;
-        unsigned short int visited_Array_Tag = visited_list->curV;
+        unsigned short int visited_Array = visited_list->visitedAt;
+        unsigned short int visited_Array_Tag = visited_list->currentVisited;
         
-        std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> top_candidates;
-        std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> candidateSet;
+        std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> top_K;
+        std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> K_Set;
+
+        dist_t lower_bound;
+        if (!isMarkedDeleted) {
+
+        }
+
 
         
     }
