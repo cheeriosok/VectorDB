@@ -15,8 +15,8 @@ Visited List Pool - a temporary bitmap for visited flags.
 
 VisitedList: Tracks whether an element was visited in the current query iteration. 
 visitedAt[i] holds when an element was last visited.
-currentMarker is incremented after each search.
-If visitedAt[i] == currentMarker. Current node was visited in this search.
+currentVisited is incremented after each search.
+If visitedAt[i] == currentVisited. Current node was visited in this search.
 
 
 VisitedListPool - preallocate N VisitedList elements.
@@ -24,67 +24,82 @@ Functions as an allocator and releaser of visited lists for memory reuse/efficie
 Concurrency is managed by dequeue and mutexes. 
 */
 
+#pragma once
+
+#include <mutex>
+#include <string.h>
+#include <deque>
+
+typedef unsigned short int vl_type;
+
+
 class VisitedList {
 public:
-    unsigned short int currentMarker_;
-    std::vector<unsigned short int> visitedAt_;
+    vl_type currentVisited; // curV
+    vl_type* visitedAt;// mass
+    unsigned int numElements; 
 
-    explicit VisitedList(int numberElements)
-        : currentMarker_(std::numeric_limits<unsigned short int>::max()),
-          visitedAt_(numberElements, 0) {}
+    VisitedList(int numElements_)
+        : currentVisited(-1), numElements(numElements_) {
+        visitedAt = new vl_type[numElements];
+    }
 
     void reset() {
-        currentMarker_++;
-        if (currentMarker_ == 0) {
-            std::fill(visitedAt_.begin(), visitedAt_.end(), 0);
-            currentMarker_++;
+        currentVisited++;
+        if (currentVisited == 0) {
+            memset(visitedAt, 0, sizeof(vl_type) * numElements);
+            currentVisited++;
         }
+    }
+
+    ~VisitedList() {
+        delete[] visitedAt;
     }
 };
 
 ///////////////////////////////////////////////////////////
 //
-// Class for multi-threaded pool-management of VisitedLists
+// Class for multi-threaded pool-management of VisitTrackers
 //
 /////////////////////////////////////////////////////////
 
 class VisitedListPool {
-    std::deque<VisitedList *> pool_;
-    std::mutex poolguard_;
-    int numberElements_;
+    std::deque<VisitedList *> pool;
+    std::mutex poolguard;
+    int numelements;
 
  public:
-    VisitedListPool(int maxPool, int numberElements) {
-        numberElements_ = numberElements;
-        for (int i = 0; i < maxPool; i++)
-            pool_.push_front(new VisitedList(numberElements_));
+    VisitedListPool(int initmaxpools, int numelements1) {
+        numelements = numelements1;
+        for (int i = 0; i < initmaxpools; i++)
+            pool.push_front(new VisitedList(numelements));
     }
 
     VisitedList *getFreeVisitedList() {
-        VisitedList *visitedList;
+        VisitedList *rez;
         {
-            std::unique_lock <std::mutex> lock(poolguard_);
-            if (pool_.size() > 0) {
-                visitedList = pool_.front();
-                pool_.pop_front();
+            std::unique_lock <std::mutex> lock(poolguard);
+            if (pool.size() > 0) {
+                rez = pool.front();
+                pool.pop_front();
             } else {
-                visitedList = new VisitedList(numberElements_);
+                rez = new VisitedList(numelements);
             }
         }
-        visitedList->reset();
-        return visitedList;
+        rez->reset();
+        return rez;
     }
 
-    void releaseVisitedList(VisitedList *visitedList) {
-        std::unique_lock <std::mutex> lock(poolguard_);
-        pool_.push_front(visitedList);
+    void releaseVisitedList(VisitedList *vl) {
+        std::unique_lock <std::mutex> lock(poolguard);
+        pool.push_front(vl);
     }
 
     ~VisitedListPool() {
-        while (pool_.size()) {
-            VisitedList *VisitedList = pool_.front();
-            pool_.pop_front();
-            delete VisitedList;
+        while (pool.size()) {
+            VisitedList *rez = pool.front();
+            pool.pop_front();
+            delete rez;
         }
     }
 };

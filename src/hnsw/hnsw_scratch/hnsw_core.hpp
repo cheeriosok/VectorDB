@@ -14,6 +14,7 @@
 // labeltype = size_t
 // typedef unsigned int tableint;
 // typedef unsigned int linklistsizeint;
+// typedef unsigned short int vl_type;
 
 template <typename dist_t>
 class HierarchicalNSW : public AlgorithmInterface<dist_t>
@@ -41,9 +42,10 @@ public:
     double level_lambda_{0.0}, inv_lambda_{0.0}; // lambda for exponential level assignment and inverse of level_lambda, respectively
 
     // Memory Layout for Level 0 (Contiguous)
-    /* Element_Stride = Total Size for all of this. 
+    /* Element_Stride = Total Size for one block of these in L0.
     // For every node in Level0, we have this structure. 
-    // level0_data_ a contig memblcok represents all of these nodes in L0!
+    // level0_data_ a contig memblcok represents ALL elements in HNSW in contiguous format, each of these blocks can be offset by
+    // internal_id * element_stride! ! After indexing our block of interest we can access the block data of our element by adding this to:
     ┌──────────────────────────────┐
     │ [level-0 links]              │  ← offset = link0_offset_ = 0
     │  - sizeof(linklistsizeint)   │
@@ -211,10 +213,59 @@ public:
         return label_locks_[lock_id];
     }
 
-    inline labeltype getExternalLabel(unsigned int internal_id) const {
+    // MEMCPY signature -> void* memcpy(void* dest, const void* src, size_t count); 
+
+    inline size_t getExternalLabel(unsigned int internal_id) const {
             size_t return_label;
-            memcpy(&return_label, (level0_data_ + internal_id * data_size_ + label_offset_), sizeof(size_t));
+            memcpy(&return_label, (level0_data_ + internal_id * element_stride_ + label_offset_), sizeof(size_t));
+            // for your own reference, level0_data_ points to the contiguous block of memory holding L0 nodes. internal_id * element_stride gives us the index 
+            // of the node of interest, and + label_offset_ gives us the offset where the label information is stored. Check diagram above.
             return return_label;
+    }
+
+    inline size_t setExternalLabel(unsigned int internal_id, size_t label) const {
+        memcpy((level0_data_ + (internal_id * element_stride_) + label_offset_), &label, sizeof(size_t));
+    }
+
+
+    inline size_t* getExternalLabelp(unsigned int internal_id) const {
+            return (size_t *)(level0_data_ + internal_id * element_stride_ + label_offset_);
+    }
+
+    inline char* getDataByInternalId(size_t internal_id) const {
+        return (level0_data_ + internal_id * element_stride_ + data_offset_);
+    }
+
+
+    // my guess reverse is an input for testing and functionla programming purposes.
+    int getRandomLevel(double reverse) {
+        std::uniform_real_distribution<double> distribution(0.0, 1.0); // random distribution between 0,1.
+        double r = -log(distribution(level_rng_) * reverse); // given seeded level_rng and distrubtion - we get a repro. rng # between 0,1. 
+        return (int) r;
+    }
+
+    size_t getCapacity() {
+        return capacity_;
+    }
+
+    size_t getElementCount() {
+        return element_count_;
+    }
+
+    size_t getDeletedCount() {
+        return deleted_count_;
+    }
+
+    std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst>
+    searchBaseLayer(unsigned int search_start_id, const void *data, int layer) {
+        VisitedList *visited_list = visited_pool_->getFreeVisitedList();
+        unsigned short int visited_Array = visited_list->mass;
+        unsigned short int visited_Array_Tag = visited_list->curV;
+        
+        std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> top_candidates;
+        std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> candidateSet;
+
+        
     }
 
 };
