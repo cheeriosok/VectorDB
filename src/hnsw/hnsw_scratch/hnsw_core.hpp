@@ -12,7 +12,7 @@
 
 
 // labeltype = size_t
-// typedef unsigned int tableint;
+// typedef unsigned int unsigned int;
 // typedef unsigned int linklistsizeint;
 // typedef unsigned short int vl_type;
 
@@ -48,9 +48,9 @@ public:
     // internal_id * element_stride! ! After indexing our block of interest we can access the block data of our element by adding this to:
     ┌──────────────────────────────┐
     │ [level-0 links]              │  ← offset = link0_offset_ = 0
-    │  - sizeof(linklistsizeint)   │
+    │  - sizeof(unsigned int)      │
     │  - link_capacity_level0_ *   │ 
-    │ sizeof(tableint)             │
+    │ sizeof(unsigned in           │
     ├──────────────────────────────┤
     │ [vector data]                │  ← offset = data_offset_
     │  - float or other dims       │
@@ -62,7 +62,7 @@ public:
 
     size_t element_stride_{0}; // total memory for node at L0 = link0_stride_ + data_size_ + sizeof(label_type)
     size_t link0_offset_{0}; // Always 0. Link list comes first in level 0 layout!
-    size_t link0_stride_{0}; // size of link block at lvl 0 (neighborlist) -> link_capacity_level0_ * sizeof(tableint) + sizeof(linklistsizeint)
+    size_t link0_stride_{0}; // size of link block at lvl 0 (neighborlist) -> link_capacity_level0_ * sizeof(unsigned int) + sizeof(unsigned int)
     size_t data_offset_{0}; // off
     size_t data_size_{0}; // Size in bytes of the vector/embedding of each lements. (determined by space / dimension * sizeof(float))
     size_t label_offset_{0}; // offset of label (label in this case is user-defined key such as an SKU
@@ -71,12 +71,12 @@ public:
     
     // Memory Layout for Level 1
     char **link_blocks_{nullptr} // pointer array for upper-level link blocks (level 0 is NOT included)
-    size_t link_stride_{0}; // size of link block in upper levels -> link_stride_ = link_capacity_upper_ * sizeof(tableint) + sizeof(linklistsizeint);
+    size_t link_stride_{0}; // size of link block in upper levels -> link_stride_ = link_capacity_upper_ * sizeof(unsigned int) + sizeof(unsigned int);
 
     // Concurrency Primitives!
     mutable std::vector<std::mutex> label_locks_; // using MAX_LABEL_OPERATION_LOCKS i.e striped locking for label->ID ops
     std::mutex global_lock_; // For rare global operations such as updating entry_id_ or max_leveL_ 
-    std::vector<std::mutex> link_locks__;// One lock per node for link list updates during graph mutation
+    std::vector<std::mutex> link_locks_;// One lock per node for link list updates during graph mutation
 
     // Label to Internal ID Mapping
    mutable std::mutex label_map_lock_; // lock for label_map_
@@ -192,7 +192,7 @@ public:
                 free(link_blocks_[i]);
         }
         free(link_blocks_);
-        link_blocks = nullptr;
+        link_blocks_ = nullptr;
         element_count_ = 0;
         visited_pool_.reset(nullptr);
     }
@@ -256,11 +256,11 @@ public:
 
 
     unsigned int* get_level0_neighbors(unsigned int internal_id) const {
-        return (unsigned int*)(level0_data_ + internal_id * size_data_per_element_ + offsetLevel0_);
+        return (unsigned int*)(level0_data_ + internal_id * element_stride_ + link0_offset_);
     }
     
-    unsigned int* get_level0_neighbors_from(unsigned int internal_id, char* data_level0_memory) const {
-        return (unsigned int*)(data_level0_memory + internal_id * size_data_per_element_ + offsetLevel0_);
+    unsigned int* get_level0_neighbors(unsigned int internal_id, char* level0_data_) const {
+        return (unsigned int*)(level0_data_ + internal_id * element_stride_ + link0_offset_);
     }
     
     unsigned int* get_level_neighbors(unsigned int internal_id, int level) const {
@@ -279,50 +279,213 @@ public:
     }
 
 
-    unsigned short int getListCount(linklistsizeint * ptr) const {
+    unsigned short int getListCount(unsigned int * ptr) const {
         return *((unsigned short int *)ptr);
     }
 
 
-    void setListCount(linklistsizeint * ptr, unsigned short int size) const {
+    void setListCount(unsigned int * ptr, unsigned short int size) const {
         *((unsigned short int*)(ptr))=*((unsigned short int *)&size);
     }
 
-    linklistsizeint *get_linklist0(tableint internal_id) const {
-        return (linklistsizeint *) (data_level0_memory_ + internal_id * size_data_per_element_ + offsetLevel0_);
+    unsigned int *get_neighbors_L0(unsigned int internal_id) const {
+        return (unsigned int *) (data_level0_memory_ + internal_id * size_data_per_element_ + offsetLevel0_);
     }
 
 
-    linklistsizeint *get_linklist0(tableint internal_id, char *data_level0_memory_) const {
-        return (linklistsizeint *) (data_level0_memory_ + internal_id * size_data_per_element_ + offsetLevel0_);
+    unsigned int *get_neighbors_L0(unsigned int internal_id, char *data_level0_memory_) const {
+        return (unsigned int *) (data_level0_memory_ + internal_id * size_data_per_element_ + offsetLevel0_);
     }
 
 
-    linklistsizeint *get_linklist(tableint internal_id, int level) const {
-        return (linklistsizeint *) (linkLists_[internal_id] + (level - 1) * size_links_per_element_);
+    unsigned int *get_neighbors(unsigned int internal_id, int level) const {
+        return (unsigned int *) (linkLists_[internal_id] + (level - 1) * size_links_per_element_);
     }
 
 
-    linklistsizeint *get_linklist_at_level(tableint internal_id, int level) const {
-        return level == 0 ? get_linklist0(internal_id) : get_linklist(internal_id, level);
+    unsigned int *get_neighbors_at_level(unsigned int internal_id, int level) const {
+        return level == 0 ? get_neighbors_L0(internal_id) : get_neighbors(internal_id, level);
     }
 
+    // This method searches one level/layr of the HNSW graph starting from start_id, for the closest neighbors to data_pt.
     std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst>
-    searchBaseLayer(unsigned int search_start_id, const void *data, int layer) {
-        VisitedList *visited_list = visited_pool_->getFreeVisitedList();
-        unsigned short int visited_Array = visited_list->visitedAt;
-        unsigned short int visited_Array_Tag = visited_list->currentVisited;
+    searchBaseLayer(unsigned int start_id, const void *data_pt, int layer) {
+        VisitedList *Visited_List = visited_pool_->getFreeVisitedList();
+        unsigned short int* Visited_Array = Visited_List->visitedAt;
+        unsigned short int Visited_Array_Tag = Visited_List->currentVisited;
         
-        std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> top_K;
+        std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> Top_K;
         std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> K_Set;
 
         dist_t lower_bound;
-        if (!isMarkedDeleted) {
+        if (!isMarkedDeleted(start_id)) {
+            dist_t distance = distance_function(data_pt, getDataByInternalId(start_id), distance_function_parameters_);
+            Top_K.emplace(distance, start_id);
+            lower_bound = distance;
+            K_Set.emplace(-distance, start_id);
+        } else {
+            lower_bound = std::numeric_limits<dist_t>::max();
+            K_Set.emplace(lower_bound, start_id);
+        }
+        Visited_Array[start_id] = Visited_Array_Tag;
 
+        while(!K_Set.empty()) {
+            std::pair<dist_t, unsigned int> current_pair = K_Set.top();
+            if ((-current_pair.first) > lower_bound && Top_K.size() == efConstruction_) {
+                break;
+            }
+            K_Set.pop();
+            unsigned int current_node_id = current_pair.second;
+            std::unique_lock <std::mutex> lock(link_locks_[current_node_id]);
+
+            int *data;
+            
+            if (layer == 0) {
+                data = (int *)get_neighbors_L0(current_node_id);
+            } else {
+                data = (int *)get_neighbors_at_level(current_node_id, layer);
+            }
+            size_t size = getListCount((unsigned int*) data);
+            unsigned int *datal = (unsigned int *) (data + 1);
+            for (size_t j = 0; j < size; j++) {
+                unsigned int K_id = *(datal + j);
+                if (Visited_Array[K_id] == Visited_Array_Tag) continue;
+                Visited_Array[K_id] = Visited_Array_Tag;
+                char *currObj1 = (getDataByInternalId(K_id));
+
+                dist_t dist1 = distance_function_(data_pt, currObj1, distance_function_parameters_);
+                if (Top_K.size() < efConstruction_ || lower_bound > dist1) {
+                    K_Set.emplace(-dist1, K_id);
+
+                    if (!isMarkedDeleted(K_id))
+                        Top_K.emplace(dist1, K_id);
+
+                    if (Top_K.size() > efConstruction_)
+                        Top_K.pop();
+
+                    if (!Top_K.empty())
+                        lower_bound = Top_K.top().first;
+                }
+            }
+        }
+        visited_pool_->releaseVisitedList(Visited_List);
+
+        return Top_K;
+    }
+    template <bool bare_bone_search = true, bool collect_metrics = false>
+std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst>
+searchBaseLayerST(
+    unsigned int start_id,
+    const void *data_pt,
+    size_t ef,
+    BaseFilterFunctor* isIdAllowed = nullptr,
+    BaseSearchStopCondition<dist_t>* stop_condition = nullptr) const {
+
+    VisitedList *Visited_List = visited_list_pool_->getFreeVisitedList();
+    unsigned short int* Visited_Array = Visited_List->visitedAt;
+    unsigned short int Visited_Array_Tag = Visited_List->currentVisited;
+
+    std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> Top_K;
+    std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> K_Set;
+
+    dist_t lower_bound;
+    if (bare_bone_search || 
+        (!isMarkedDeleted(start_id) && ((!isIdAllowed) || (*isIdAllowed)(getExternalLabel(start_id))))) {
+        
+        char* start_data = getDataByInternalId(start_id);
+        dist_t distance = fstdistfunc_(data_pt, start_data, distance_function_parameters_);
+        lower_bound = distance;
+        Top_K.emplace(distance, start_id);
+
+        if (!bare_bone_search && stop_condition) {
+            stop_condition->add_point_to_result(getExternalLabel(start_id), start_data, distance);
         }
 
-
-        
+        K_Set.emplace(-distance, start_id);
+    } else {
+        lower_bound = std::numeric_limits<dist_t>::max();
+        K_Set.emplace(-lower_bound, start_id);
     }
+
+    Visited_Array[start_id] = Visited_Array_Tag;
+
+    while (!K_Set.empty()) {
+        std::pair<dist_t, unsigned int> current_pair = K_Set.top();
+        dist_t candidate_distance = -current_pair.first;
+
+        bool should_stop;
+        if (bare_bone_search) {
+            should_stop = candidate_distance > lower_bound;
+        } else {
+            if (stop_condition) {
+                should_stop = stop_condition->should_stop_search(candidate_distance, lower_bound);
+            } else {
+                should_stop = candidate_distance > lower_bound && Top_K.size() == ef;
+            }
+        }
+
+        if (should_stop) break;
+
+        K_Set.pop();
+        unsigned int current_node_id = current_pair.second;
+
+        int *neighbor_data = (int *)get_linklist0(current_node_id);
+        size_t neighbor_count = getListCount((linklistsizeint*)neighbor_data);
+
+        if (collect_metrics) {
+            metric_hops++;
+            metric_distance_computations += neighbor_count;
+        }
+
+        for (size_t j = 1; j <= neighbor_count; j++) {
+            unsigned int neighbor_id = *(neighbor_data + j);
+
+            if (Visited_Array[neighbor_id] == Visited_Array_Tag) continue;
+            Visited_Array[neighbor_id] = Visited_Array_Tag;
+
+            char *neighbor_data_ptr = getDataByInternalId(neighbor_id);
+            dist_t dist = fstdistfunc_(data_pt, neighbor_data_ptr, dist_func_param_);
+
+            bool consider_candidate = !bare_bone_search && stop_condition
+                ? stop_condition->should_consider_candidate(dist, lower_bound)
+                : Top_K.size() < ef || lower_bound > dist;
+
+            if (consider_candidate) {
+                K_Set.emplace(-dist, neighbor_id);
+
+                if (bare_bone_search || 
+                    (!isMarkedDeleted(neighbor_id) && ((!isIdAllowed) || (*isIdAllowed)(getExternalLabel(neighbor_id))))) {
+
+                    Top_K.emplace(dist, neighbor_id);
+                    if (!bare_bone_search && stop_condition) {
+                        stop_condition->add_point_to_result(getExternalLabel(neighbor_id), neighbor_data_ptr, dist);
+                    }
+                }
+
+                bool remove_extra = !bare_bone_search && stop_condition
+                    ? stop_condition->should_remove_extra()
+                    : Top_K.size() > ef;
+
+                while (remove_extra) {
+                    unsigned int id = Top_K.top().second;
+                    Top_K.pop();
+                    if (!bare_bone_search && stop_condition) {
+                        stop_condition->remove_point_from_result(getExternalLabel(id), getDataByInternalId(id), dist);
+                        remove_extra = stop_condition->should_remove_extra();
+                    } else {
+                        remove_extra = Top_K.size() > ef;
+                    }
+                }
+
+                if (!Top_K.empty())
+                    lower_bound = Top_K.top().first;
+            }
+        }
+    }
+
+    visited_list_pool_->releaseVisitedList(Visited_List);
+    return Top_K;
+}
+
 
 };
