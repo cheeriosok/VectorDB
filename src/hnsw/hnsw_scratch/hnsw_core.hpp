@@ -307,9 +307,9 @@ public:
         return level == 0 ? get_neighbors_L0(internal_id) : get_neighbors(internal_id, level);
     }
 
-    // This method searches one level/layr of the HNSW graph starting from start_id, for the closest neighbors to data_pt.
+    // This method searches one level/layr of the HNSW graph starting from start_id, for the closest neighbors to data_point.
     std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst>
-    searchBaseLayer(unsigned int start_id, const void *data_pt, int layer) {
+    searchBaseLayer(unsigned int start_id, const void *data_point, int layer) {
         VisitedList *Visited_List = visited_pool_->getFreeVisitedList();
         unsigned short int* Visited_Array = Visited_List->visitedAt;
         unsigned short int Visited_Array_Tag = Visited_List->currentVisited;
@@ -319,7 +319,7 @@ public:
 
         dist_t lower_bound;
         if (!isMarkedDeleted(start_id)) {
-            dist_t distance = distance_function(data_pt, getDataByInternalId(start_id), distance_function_parameters_);
+            dist_t distance = distance_function(data_point, getDataByInternalId(start_id), distance_function_parameters_);
             Top_K.emplace(distance, start_id);
             lower_bound = distance;
             K_Set.emplace(-distance, start_id);
@@ -353,7 +353,7 @@ public:
                 Visited_Array[K_id] = Visited_Array_Tag;
                 char *currObj1 = (getDataByInternalId(K_id));
 
-                dist_t dist1 = distance_function_(data_pt, currObj1, distance_function_parameters_);
+                dist_t dist1 = distance_function_(data_point, currObj1, distance_function_parameters_);
                 if (Top_K.size() < efConstruction_ || lower_bound > dist1) {
                     K_Set.emplace(-dist1, K_id);
 
@@ -372,120 +372,151 @@ public:
 
         return Top_K;
     }
-    template <bool bare_bone_search = true, bool collect_metrics = false>
-std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst>
-searchBaseLayerST(
-    unsigned int start_id,
-    const void *data_pt,
-    size_t ef,
-    BaseFilterFunctor* isIdAllowed = nullptr,
-    BaseSearchStopCondition<dist_t>* stop_condition = nullptr) const {
+    void getNeighborsByHeuristic2 (
+        std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> &Top_K, 
+        const size_t M) {
+        if (Top_K.size() < M) {
+            return;
+        }
+        std::priority_queue<std::pair<dist_t, unsigned int>> queue_closest;
+        std::vector<std::pair<dist_t, unsigned int>> return_list;
+        while (Top_K.size() > 0) {
+            queue_closest.emplace(-Top_K.top().first, Top_K.top().second);
+            Top_K.pop();
+        }
+        while (queue_closest.size()) {
+            if (return_list() >= M) break;
+            std::pair<dist_t, unsigned int> current_pair = queue.closest.top();
+            dist_t distance_to_query = - current_pair.first;
+            queue_closest.pop();
+            bool flag = true;
 
-    VisitedList *Visited_List = visited_list_pool_->getFreeVisitedList();
-    unsigned short int* Visited_Array = Visited_List->visitedAt;
-    unsigned short int Visited_Array_Tag = Visited_List->currentVisited;
-
-    std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> Top_K;
-    std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> K_Set;
-
-    dist_t lower_bound;
-    if (bare_bone_search || 
-        (!isMarkedDeleted(start_id) && ((!isIdAllowed) || (*isIdAllowed)(getExternalLabel(start_id))))) {
+            for (std::pair<dist_t, unsigned int> second_pair : return_list) {
+                dist_t current_distance = distance_function_(getDataByInternalId(second_pair.second),
+                                                             getDataByInternalId(curent_pair.second),
+                                                             distance_function_parameters_);
+                if (current_distance < distance_to_query) {
+                    flag = false 
+                    break;
+                }
+            }
+            if (flag) return_list.push_back(current_pair);
+        }
+        for (std::pair<dist_t, unsigned int> current_pair : return_list)
+            Top_K.emplace(-current_pair.first, current_pair.second);
         
-        char* start_data = getDataByInternalId(start_id);
-        dist_t distance = fstdistfunc_(data_pt, start_data, distance_function_parameters_);
-        lower_bound = distance;
-        Top_K.emplace(distance, start_id);
-
-        if (!bare_bone_search && stop_condition) {
-            stop_condition->add_point_to_result(getExternalLabel(start_id), start_data, distance);
-        }
-
-        K_Set.emplace(-distance, start_id);
-    } else {
-        lower_bound = std::numeric_limits<dist_t>::max();
-        K_Set.emplace(-lower_bound, start_id);
     }
 
-    Visited_Array[start_id] = Visited_Array_Tag;
+    unsigned int mutuallyConnectNewElement(
+        const void *data_point,
+        unsigned int current_c,
+        std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> &Top_K,
+        int level,
+        bool updateFlag) {
+        
+        size_t max_M = level ? max_M_ : maxM0_;
+        getNeighborsByHeuristic2(Top_K, M_);
+        if (Top_K.size() > M_) throw std::runtime_error("Should not be more than M_ candidates returned by the heuristic");
+        std::vector<unsigned int> selectedNeighbors;
+        selectedNeighbors.reserve(M_);
+        while (Top_K.size() > 0) {
+            selectedNeighbors.push_back(Top_K.top().second);
+            Top_K.pop();
+        }
 
-    while (!K_Set.empty()) {
-        std::pair<dist_t, unsigned int> current_pair = K_Set.top();
-        dist_t candidate_distance = -current_pair.first;
+        unsigned int next_closest_entry_point = selectedNeighbors.back();
+        {
+            std::unique_lock <std::mutex> lock(link_locks_[current_c], std::defer_lock);
+            if (updateFlag) {
+                lock.lock();
+            }
+            unsigned int *link_current;
+            if (level == 0)
+                link_current = get_level0_neighbors(current_c);
+            else
+                link_current = get_neighbors_at_level(current_c, level);
 
-        bool should_stop;
-        if (bare_bone_search) {
-            should_stop = candidate_distance > lower_bound;
-        } else {
-            if (stop_condition) {
-                should_stop = stop_condition->should_stop_search(candidate_distance, lower_bound);
-            } else {
-                should_stop = candidate_distance > lower_bound && Top_K.size() == ef;
+            if (*link_current && !updateFlag) 
+                throw std::runtime_error("The newly inserted element should have a blank neighbor list");
+            
+            setListCount(link_current, selectedNeighbors.size());
+            unsigned int *data = (unsigned int *) (link_current + 1);
+            for (size_t idx = 0; idx < selectedNeighbors.size(); idx++) {
+                if (data[idx] && !updateFlag)
+                    throw std::runtime_error("Possible memory corruption");
+                if (level > element_levels_[selectedNeighbors[idx]])
+                    throw std::runtime_error("Trying to make a link on a non-existent level");
+
+                data[idx] = selectedNeighbors[idx];
+            }
+        }
+        for (size_t idx = 0; idx < selectedNeighbors.size(); idx++) {
+            std::unique_lock <std::mutex> lock(link_locks_[selectedNeighbors[idx]]);
+
+            unsigned int *link_other;
+            if (level == 0)
+                link_other = get_level0_neighbors(selectedNeighbors[idx]);
+            else
+                link_other = get_neighbors_at_level(selectedNeighbors[idx], level);
+
+            size_t sizeof_link_other = getListCount(link_other);
+
+            if (sizeof_link_other > max_M)
+                throw std::runtime_error("Bad value of sizeof_link_other");
+            if (selectedNeighbors[idx] == current_c)
+                throw std::runtime_error("Trying to connect an element to itself");
+            if (level > element_levels_[selectedNeighbors[idx]])
+                throw std::runtime_error("Trying to make a link on a non-existent level");
+
+            unsigned int *data = (unsigned int *) (link_other + 1);
+
+            bool is_current_c_present = false;
+            if (isUpdate) {
+                for (size_t j = 0; j < sizeof_link_other; j++) {
+                    if (data[j] == current_c) {
+                        is_current_c_present = true;
+                        break;
+                    }
+                }
+            }
+
+            // If cur_c is already present in the neighboring connections of `selectedNeighbors[idx]` then no need to modify any connections or run the heuristics.
+            if (!is_cur_c_present) {
+                if (sz_link_list_other < Mcurmax) {
+                    data[sz_link_list_other] = cur_c;
+                    setListCount(ll_other, sz_link_list_other + 1);
+                } else {
+                    // finding the "weakest" element to replace it with the new one
+                    dist_t d_max = fstdistfunc_(getDataByInternalId(cur_c), getDataByInternalId(selectedNeighbors[idx]),
+                                                dist_func_param_);
+                    // Heuristic:
+                    std::priority_queue<std::pair<dist_t, unsigned int>, std::vector<std::pair<dist_t, unsigned int>>, CompareByFirst> candidates;
+                    candidates.emplace(d_max, cur_c);
+
+                    for (size_t j = 0; j < sz_link_list_other; j++) {
+                        candidates.emplace(
+                                fstdistfunc_(getDataByInternalId(data[j]), getDataByInternalId(selectedNeighbors[idx]),
+                                                dist_func_param_), data[j]);
+                    }
+
+                    getNeighborsByHeuristic2(candidates, Mcurmax);
+
+                    int indx = 0;
+                    while (candidates.size() > 0) {
+                        data[indx] = candidates.top().second;
+                        candidates.pop();
+                        indx++;
+                    }
+
+                    setListCount(ll_other, indx);
+
+                }
             }
         }
 
-        if (should_stop) break;
-
-        K_Set.pop();
-        unsigned int current_node_id = current_pair.second;
-
-        int *neighbor_data = (int *)get_linklist0(current_node_id);
-        size_t neighbor_count = getListCount((linklistsizeint*)neighbor_data);
-
-        if (collect_metrics) {
-            metric_hops++;
-            metric_distance_computations += neighbor_count;
-        }
-
-        for (size_t j = 1; j <= neighbor_count; j++) {
-            unsigned int neighbor_id = *(neighbor_data + j);
-
-            if (Visited_Array[neighbor_id] == Visited_Array_Tag) continue;
-            Visited_Array[neighbor_id] = Visited_Array_Tag;
-
-            char *neighbor_data_ptr = getDataByInternalId(neighbor_id);
-            dist_t dist = fstdistfunc_(data_pt, neighbor_data_ptr, dist_func_param_);
-
-            bool consider_candidate = !bare_bone_search && stop_condition
-                ? stop_condition->should_consider_candidate(dist, lower_bound)
-                : Top_K.size() < ef || lower_bound > dist;
-
-            if (consider_candidate) {
-                K_Set.emplace(-dist, neighbor_id);
-
-                if (bare_bone_search || 
-                    (!isMarkedDeleted(neighbor_id) && ((!isIdAllowed) || (*isIdAllowed)(getExternalLabel(neighbor_id))))) {
-
-                    Top_K.emplace(dist, neighbor_id);
-                    if (!bare_bone_search && stop_condition) {
-                        stop_condition->add_point_to_result(getExternalLabel(neighbor_id), neighbor_data_ptr, dist);
-                    }
-                }
-
-                bool remove_extra = !bare_bone_search && stop_condition
-                    ? stop_condition->should_remove_extra()
-                    : Top_K.size() > ef;
-
-                while (remove_extra) {
-                    unsigned int id = Top_K.top().second;
-                    Top_K.pop();
-                    if (!bare_bone_search && stop_condition) {
-                        stop_condition->remove_point_from_result(getExternalLabel(id), getDataByInternalId(id), dist);
-                        remove_extra = stop_condition->should_remove_extra();
-                    } else {
-                        remove_extra = Top_K.size() > ef;
-                    }
-                }
-
-                if (!Top_K.empty())
-                    lower_bound = Top_K.top().first;
-            }
-        }
+        return next_closest_entry_point;
     }
-
-    visited_list_pool_->releaseVisitedList(Visited_List);
-    return Top_K;
-}
-
 
 };
+
+
